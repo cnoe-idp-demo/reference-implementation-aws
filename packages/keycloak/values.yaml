@@ -6,6 +6,9 @@ proxyHeaders: "forwarded"
 global:
   defaultStorageClass: gp3
 
+image:
+  repository: bitnamilegacy/postgresql
+
 auth:
   adminUser: cnoe-admin
   adminPassword: cnoe-admin
@@ -23,6 +26,8 @@ ingress:
 
 postgresql:
   enabled: true
+  image:
+    repository: bitnamilegacy/postgresql
   auth:
     username: keycloak
     database: keycloak
