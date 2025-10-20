@@ -9,7 +9,7 @@ global:
     allowInsecureImages: true
 
 image:
-  repository: bitnamilegacy/postgresql
+  repository: bitnamilegacy/keycloak
 
 auth:
   adminUser: cnoe-admin
