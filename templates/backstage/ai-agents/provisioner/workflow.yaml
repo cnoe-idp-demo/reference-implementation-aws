@@ -1,0 +1,627 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${{values.name}}
+  labels:
+    name: ${{values.name}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${{values.name}}
+  namespace: ${{values.name}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: operate-workflow-sa
+  namespace: ${{values.name}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: default-role-binding
+  namespace: ${{values.name}}
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: ${{values.name}}
+roleRef:
+  kind: ClusterRole
+  name: argo-aggregate-to-view
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: operate-workflow-sa-binding
+  namespace: ${{values.name}}
+subjects:
+  - kind: ServiceAccount
+    name: operate-workflow-sa
+    namespace: ${{values.name}}
+roleRef:
+  kind: ClusterRole
+  name: argo-server-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ${{values.name}}-cluster-binding
+  namespace: ${{values.name}}
+subjects:
+  - kind: ServiceAccount
+    name: ${{values.name}}
+    namespace: ${{values.name}}
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: github-credentials
+  namespace: ${{values.name}}
+spec:
+  secretStoreRef:
+    name: github
+    kind: ClusterSecretStore
+  refreshInterval: "0"
+  target:
+    name: github-credentials
+  data:
+    - secretKey: GITHUB_TOKEN
+      remoteRef:
+        key: github-token
+        property: token
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: k8s-config
+  namespace: ${{values.name}}
+stringData:
+  k8s-config.yaml:
+    "type: 'config'\nclusters:\n  - url: https://kubernetes.default.svc.cluster.local\n
+    \   name: local\n    authProvider: 'serviceAccount'\n    skipTLSVerify: true\n
+    \   skipMetricsLookup: true\n    serviceAccountToken: \n      $file: /var/run/secrets/kubernetes.io/serviceaccount/token\n
+    \   caData: \n      $file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt\n"
+---
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: ${{values.name}}
+spec:
+  nats:
+    native:
+      auth: token
+      replicas: 3
+---
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: "${{values.name}}-provisioner"
+  namespace: ${{values.name}}
+spec:
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  webhook:
+    github:
+      port: "12000"
+      endpoint: /
+      method: POST
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: "${{values.name}}-provisioner"
+  namespace: ${{values.name}}
+spec:
+  template:
+    serviceAccountName: operate-workflow-sa
+  dependencies:
+    - name: test-dep
+      eventSourceName: "${{values.name}}-provisioner"
+      eventName: github
+      filters:
+        data:
+          - path: "[body.commits.#.modified.#()#]"
+            type: string
+            value:
+              - "provisioner.yaml"
+  triggers:
+    - template:
+        name: "${{values.name}}-provisioner-argo-workflow-trigger"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: "provisioner-${{values.name}}-"
+                namespace: ${{values.name}}
+                labels:
+                  env: dev
+                  entity-id: "${{values.name}}"
+              spec:
+                serviceAccountName: ${{values.name}}
+                entrypoint: instantiate-provisioner
+                volumes:
+                  - name: k8s-config
+                    secret:
+                      secretName: k8s-config
+                arguments:
+                  parameters:
+                    - name: service-name
+                      value: ${{values.name}}
+                    - name: repobaseurl
+                      value: ${{values.repoHost}}
+                    - name: argoeventsBaseUrl
+                      value: ${{values.repoHost}}:443/argo-events
+                    - name: repoHostName
+                      value: ${{values.repoHost}}
+                volumeClaimTemplates:
+                  - metadata:
+                      name: workdir
+                    spec:
+                      accessModes: ["ReadWriteOnce"]
+                      resources:
+                        requests:
+                          storage: 256Mi
+                templates:
+                  - name: instantiate-provisioner
+                    dag:
+                      tasks:
+                        - name: clone-shared-helm-repo
+                          template: clone-repo
+                          arguments:
+                            parameters:
+                              - name: repo-name
+                                value: "https://github.com/cnoe-idp-demo/shared-helm-charts"
+                              - name: target-dir
+                                value: shared-repo
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                        - name: cicd-argocd-apps
+                          template: cicd-argocd-apps
+                          arguments:
+                            parameters:
+                              - name: app-repo
+                                value: "https://github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}"
+                              - name: deploy-repo
+                                value: "https://github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}-deploy"
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                          depends: "clone-shared-helm-repo"
+                        - name: create-dockerconfig
+                          template: create-dockerconfig
+                          arguments:
+                            parameters:
+                              - name: github-url
+                                value: "https://github.com"
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                          depends: "cicd-argocd-apps"
+                        - name: clone-deploy-repo
+                          template: clone-repo
+                          arguments:
+                            parameters:
+                              - name: repo-name
+                                value: "https://github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}-deploy"
+                              - name: target-dir
+                                value: "{{workflow.parameters.service-name}}-deploy"
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                          depends: "create-dockerconfig"
+                        - name: helm-folders-create
+                          template: create-helm-env-directories
+                          arguments:
+                            parameters:
+                              - name: deploy-repo
+                                value: "https://github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}-deploy"
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                              - name: host-name
+                                value: "{{workflow.parameters.repoHostName}}"
+                          depends: "clone-deploy-repo"
+                        - name: push-to-deploy-repo
+                          template: push-to-repo
+                          when: "'{{tasks.helm-folders-create.outputs.parameters.commit-flag}}' == 'commit'"
+                          arguments:
+                            parameters:
+                              - name: deploy-repo
+                                value: "github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}-deploy"
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                          depends: "helm-folders-create"
+                        - name: create-argocd-apps-for-services
+                          template: argo-cd-apps-for-services
+                          arguments:
+                            parameters:
+                              - name: deploy-repo
+                                value: "https://github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}-deploy"
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                          depends: "push-to-deploy-repo || push-to-deploy-repo.Skipped"
+                        - name: add-webhook-to-apprepo
+                          template: github-webhook-creation
+                          arguments:
+                            parameters:
+                              - name: github-url
+                                value: "https://api.github.com"
+                              - name: repo-name
+                                value: "{{workflow.parameters.service-name}}"
+                              - name: webhook-url
+                                value: "https://{{workflow.parameters.argoeventsBaseUrl}}/{{workflow.parameters.service-name}}"
+                          depends: "create-argocd-apps-for-services"
+                        - name: add-webhook-to-provisioner
+                          template: github-webhook-creation
+                          arguments:
+                            parameters:
+                              - name: github-url
+                                value: "https://api.github.com"
+                              - name: repo-name
+                                value: "{{workflow.parameters.service-name}}-deploy"
+                              - name: webhook-url
+                                value: "https://{{workflow.parameters.argoeventsBaseUrl}}/{{workflow.parameters.service-name}}-provisioner"
+                          depends: "create-argocd-apps-for-services"
+                        - name: create-codebuild-project
+                          template: create-codebuild-project
+                          arguments:
+                            parameters:
+                              - name: service-name
+                                value: "{{workflow.parameters.service-name}}"
+                              - name: s3-url
+                                value: "mmaroth-aip-cb-bucket/{{workflow.parameters.service-name}}/"
+                          depends: "create-argocd-apps-for-services"
+                  - name: clone-repo
+                    inputs:
+                      parameters:
+                        - name: repo-name
+                        - name: target-dir
+                    container:
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                      image: alpine/git:v2.45.1
+                      workingDir: "/workdir/{{inputs.parameters.target-dir}}"
+                      args:
+                        - clone
+                        - --depth
+                        - "1"
+                        - --branch
+                        - "main"
+                        - --single-branch
+                        - "{{inputs.parameters.repo-name}}.git"
+                        - -c
+                        - http.sslVerify=false
+                        - .
+                  - name: cicd-argocd-apps
+                    inputs:
+                      parameters:
+                        - name: app-repo
+                        - name: deploy-repo
+                        - name: service-name
+                    container:
+                      image: alpine/k8s:1.31.0
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                        - mountPath: "/.kube/"
+                          name: k8s-config
+                      workingDir: /workdir
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          ls -lrt &&
+                          cd shared-repo/argocd-apps &&
+                          app_repo={{inputs.parameters.app-repo}} &&
+                          deploy_repo={{inputs.parameters.deploy-repo}} &&
+                          service_name={{inputs.parameters.service-name}} &&
+                          kubectl get ns &&
+                          echo "serviceName: $service_name" > test.yaml &&
+                          echo "envList: " >> test.yaml &&
+                          echo "  ci:" >> test.yaml &&
+                          echo "    repo: $app_repo" >> test.yaml &&
+                          echo "    path: ci " >> test.yaml &&
+                          echo "    namespace: $service_name " >> test.yaml &&
+                          echo "  cd:" >> test.yaml &&
+                          echo "    repo: $deploy_repo" >> test.yaml &&
+                          echo "    path: cd " >> test.yaml &&
+                          echo "    namespace: $service_name " >> test.yaml &&
+                          helm template . -f test.yaml &&
+                          helm template . -f test.yaml | kubectl apply -f -
+                  - name: create-dockerconfig
+                    inputs:
+                      parameters:
+                        - name: github-url
+                        - name: service-name
+                    container:
+                      image: alpine/k8s:1.31.0
+                      envFrom:
+                        - secretRef:
+                            name: aws-credentials
+                        - secretRef:
+                            name: github-credentials
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                        - mountPath: "/.kube/"
+                          name: k8s-config
+                      workingDir: /workdir
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          apk add yq aws-cli &&
+                          echo "Creating Configmap for docker config" &&
+                          ecr_token=$(aws ecr get-login-password --region $AWS_DEFAULT_REGION | tr -d '\n') &&
+                          ecr_auth=$(echo -n AWS:$ecr_token | base64 | tr -d '\n') &&
+                          github_auth=$(echo -n "token:$GITHUB_TOKEN" | base64 | tr -d '\n') &&
+                          aws ecr create-repository --repository-name {{inputs.parameters.service-name}} --region $AWS_DEFAULT_REGION &&
+                          printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: docker-config\n  namespace: {{inputs.parameters.service-name}}\ndata:\n  config.json: |\n    {\n      "auths": {\n        "ghcr.io": {\n          "auth": "%s"\n        },\n        "%s.dkr.ecr.%s.amazonaws.com": {\n          "auth": "%s"\n        }\n      }\n    }\n' "$github_auth" "$AWS_ACCOUNT_ID" "$AWS_DEFAULT_REGION" "$ecr_auth" > docker_config.yaml &&
+                          cat docker_config.yaml &&
+                          kubectl apply -f docker_config.yaml
+                  - name: create-helm-env-directories
+                    inputs:
+                      parameters:
+                        - name: deploy-repo
+                        - name: service-name
+                        - name: host-name
+                    container:
+                      image: alpine:3.20
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                      workingDir: "/workdir/{{ inputs.parameters.service-name }}-deploy"
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          apk add yq &&
+                          ls -lrt && pwd &&
+                          sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/app-deploy/values.yaml &&
+                          sed -i "s/REGISTRY_HOST/{{ inputs.parameters.host-name }}/g" /workdir/shared-repo/app-deploy/values.yaml &&
+                          sed -i "s/INGRESS_HOST/{{ inputs.parameters.host-name }}/g" /workdir/shared-repo/app-deploy/values.yaml &&
+                          echo "Check all environment specific helm templates exists or not" &&
+                          echo -n "flag" > /workdir/commit_flag.txt &&
+                          if [ ! -d environments ]; then
+                            mkdir environments
+                          fi &&
+                          cd environments/ &&
+                          image_tag="0.0.0" &&
+                          for env in $(yq -r '.envs[].name' ../provisioner.yaml); do 
+                            echo "*** Processing ${env} Env ***"
+                            if [ -d $env ]; then 
+                                echo "$env env helm chart exists, skipping helm directory creation"
+                                image_tag=$(yq -r '.image.tag' $env/values.yaml)
+                            else
+                                echo "Creating $env env helm skelton structure"
+                                echo -n "commit" > /workdir/commit_flag.txt
+                                mkdir $env
+                                # cp -pR ../helm ${env}/
+                                cp -pR /workdir/shared-repo/app-deploy/* ${env}/
+                                ls -lrt ${env}/
+                                sed -i "s/envName: .*/envName: $env/" ${env}/values.yaml
+                                sed -i "s/tag: .*/tag: $image_tag/" ${env}/values.yaml
+                            fi
+                          done &&
+                          if grep -q "commit" "/workdir/commit_flag.txt"; then
+                            echo "Adding new environment to CD helm chart"
+                            yq -i '.envs = (load("../provisioner.yaml") | .envs)' ../cd/values.yaml
+                          fi
+                    outputs:
+                      parameters:
+                        - name: commit-flag
+                          valueFrom:
+                            path: /workdir/commit_flag.txt
+                  - name: push-to-repo
+                    inputs:
+                      parameters:
+                        - name: deploy-repo
+                        - name: service-name
+                    container:
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                      image: alpine/git:v2.45.1
+                      envFrom:
+                        - secretRef:
+                            name: github-credentials
+                      workingDir: /workdir/{{ inputs.parameters.service-name }}-deploy
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          ls -lrt && pwd &&
+                          git status &&
+                          git config --global user.email "noreply@aws.com" &&
+                          git config --global user.name ARGO &&
+                          git remote set-url origin https://token:$GITHUB_TOKEN@{{inputs.parameters.deploy-repo}}.git &&
+                          git add . &&
+                          git commit -m "Adding helm charts" &&
+                          git push --set-upstream origin main
+                  - name: argo-cd-apps-for-services
+                    inputs:
+                      parameters:
+                        - name: deploy-repo
+                        - name: service-name
+                    container:
+                      image: alpine/k8s:1.31.0
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                        - mountPath: "/.kube/"
+                          name: k8s-config
+                      workingDir: /workdir
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          ls -lrt &&
+                          apk add yq &&
+                          cd shared-repo/argocd-apps &&
+                          deploy_repo={{inputs.parameters.deploy-repo}} &&
+                          service_name={{inputs.parameters.service-name}} &&
+                          echo "serviceName: $service_name" > cd-test.yaml && 
+                          echo "envList: " >> cd-test.yaml &&
+                          for env in $(yq -r '.envs[].name' /workdir/$service_name-deploy/provisioner.yaml); do 
+                            echo "*** Creating ${env} Argo CD App ***"
+                            echo "  $env:" >> cd-test.yaml
+                            echo "    repo: $deploy_repo" >> cd-test.yaml
+                            echo "    path: environments/$env " >> cd-test.yaml
+                            echo "    namespace: $service_name " >> cd-test.yaml
+                          done &&
+                          helm template . -f cd-test.yaml &&
+                          helm template . -f cd-test.yaml | kubectl apply -f -
+                  - name: github-webhook-creation
+                    inputs:
+                      parameters:
+                        - name: github-url
+                        - name: repo-name
+                        - name: webhook-url
+                    container:
+                      image: alpine:3.20
+                      envFrom:
+                        - secretRef:
+                            name: github-credentials
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                      workingDir: "/workdir"
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          apk add curl jq &&
+                          hooks_api_url={{inputs.parameters.github-url}}/repos/cnoe-idp-demo/{{inputs.parameters.repo-name}}/hooks &&
+                          webhook_url={{inputs.parameters.webhook-url}} &&
+                          webhook_details=`curl -X 'GET' "${hooks_api_url}" -H "accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" | jq '.[].config.url'` &&
+                          if [ -z "$webhook_details" ]; then
+                            echo "Webhook is not found, creating webhook with $webhook_url" 
+                            curl -X 'POST' "${hooks_api_url}" -H "accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" -d '{"name": "web", "events": ["push"], "config": {"url": "'${webhook_url}'", "content_type": "json"}, "active": true}'
+                          else
+                            echo "Webhook already exists"
+                          fi
+                  - name: create-codebuild-project
+                    inputs:
+                      parameters:
+                        - name: service-name
+                        - name: s3-url
+                    container:
+                      image: amazon/aws-cli:2.15.30
+                      envFrom:
+                        - secretRef:
+                            name: aws-credentials
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                      workingDir: "/workdir"
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          SERVICE_NAME={{inputs.parameters.service-name}} &&
+                          S3_URL={{inputs.parameters.s3-url}} &&
+                          PROJECT_NAME="aip-${SERVICE_NAME}-build" &&
+                          
+                          echo "Creating CodeBuild project: $PROJECT_NAME" &&
+                          aws codebuild create-project \
+                            --name "$PROJECT_NAME" \
+                            --description "CodeBuild project for $SERVICE_NAME" \
+                            --source '{
+                              "type": "S3",
+                              "location": "'$S3_URL'",
+                              "buildspec": "buildspec.yml"
+                            }' \
+                            --artifacts '{
+                              "type": "NO_ARTIFACTS"
+                            }' \
+                            --environment '{
+                              "type": "ARM_CONTAINER",
+                              "image": "aws/codebuild/amazonlinux-aarch64-standard:3.0",
+                              "computeType": "BUILD_GENERAL1_SMALL",
+                              "privilegedMode": false,
+                              "imagePullCredentialsType": "CODEBUILD"
+                            }' \
+                            --service-role "arn:aws:iam::229560443702:role/service-role/codebuild-mmaroth-aip-codebuild-service-role" \
+                            --region us-west-2 || echo "Project may already exist or role not found" &&
+                          echo "CodeBuild project $PROJECT_NAME created successfully"
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "${{values.name}}-provisioner-webhook-es-ing"
+  namespace: ${{values.name}}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 512m
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ${{values.repoHost}}
+      http:
+        paths:
+          - backend:
+              service:
+                name: "${{values.name}}-provisioner-eventsource-svc"
+                port:
+                  number: 12000
+            path: /argo-events/${{values.name}}-provisioner(/|$)(.*)
+            pathType: ImplementationSpecific
+    - host: localhost
+      http:
+        paths:
+          - backend:
+              service:
+                name: "${{values.name}}-provisioner-eventsource-svc"
+                port:
+                  number: 12000
+            path: /argo-events/${{values.name}}-provisioner(/|$)(.*)
+            pathType: ImplementationSpecific
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wait-and-invoke-provisioner
+  namespace: ${{values.name}}
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: bash
+          image: alpine/k8s:1.31.0
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - >-
+              set -x &&
+              apk add curl &&
+              while true; do
+                status=$(curl -s -k -w "%{http_code}" -o /dev/null -d '{ "commits": [ { "modified": ["provisioner.yaml"]}]}' -H "Content-Type: application/json" -X POST ${{values.name}}-provisioner-eventsource-svc:12000/)
+                if [ "$status" -eq '200' ]; then
+                  echo "Success - got HTTP 200"
+                  sleep 2
+                  count=$(kubectl get workflows -l entity-id=${{values.name}},workflows.argoproj.io/phase=Running --no-headers -n ${{values.name}}|wc -l)
+                  if [ "$count" -gt '0' ]; then
+                    break 
+                  fi
+                fi
+                echo "Got status $status, retrying in 10s..."
+                sleep 10
+              done

@@ -1,0 +1,17 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Login to ECR"
+      - aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 229560443702.dkr.ecr.us-west-2.amazonaws.com
+  build:
+    commands:
+      - echo "Build docker image"
+      - tar -xvf *.tar.gz
+      - ls -lrt
+      - docker buildx build --platform linux/arm64 -t 229560443702.dkr.ecr.us-west-2.amazonaws.com/my-strands-agent:0.0.1 --load .
+  post_build:
+    commands:
+      - echo "Pushing image to ECR"
+      - docker push 229560443702.dkr.ecr.us-west-2.amazonaws.com/my-strands-agent:0.0.1

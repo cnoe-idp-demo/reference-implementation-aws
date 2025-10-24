@@ -1,0 +1,111 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  description: Create and Deploy Agent on AgentCore
+  name: agentcore-agent
+  title: Deploy AgentCore Agent
+  tags:
+    - python
+    - agentcore
+    - bedrock
+spec:
+  owner: user:guest
+  type: agent
+  parameters:
+    - title: Agent Info
+      required:
+        - agentName
+      properties:
+        agentName:
+          title: Agent Name
+          type: string
+          default: strandsdemo01
+          pattern: ^[a-z\d]{1,64}$
+          description: Provide Agent Name
+        agentSDK:
+          title: AgentSDK
+          type: string
+          default: strands
+          enum:
+            - strands
+            - lang-graph
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com  
+        
+  steps:
+    - id: deploy-template
+      name: Generating application deployment template
+      action: fetch:template
+      input:
+        url: ./deploy
+        targetPath: ./agent-deploy
+        values:
+          name: ${{parameters.agentName}}
+          repoUrl: ${{parameters.repoUrl}}
+    
+    - id: agent-template
+      name: Generating agent code template
+      action: fetch:template
+      input:
+        url: ./strands
+        targetPath: ./agent
+        values:
+          name: ${{parameters.agentName}}
+          repoUrl: ${{parameters.repoUrl}}
+    
+    - id: provisioner-template
+      name: Generating agent code template
+      action: fetch:template
+      input:
+        url: ./provisioner
+        targetPath: ./provisioner
+        values:
+          name: ${{parameters.agentName}}
+          repoUrl: ${{parameters.repoUrl}}
+
+    - id: publish-2-app-repo
+      name: Publish to agent repo
+      action: github:repo:push
+      input:
+        description: This is an sample agent
+        sourcePath: ./agent
+        repoUrl: ${{parameters.repoUrl}}?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
+        defaultBranch: main
+    
+    - id: publish-2-deploy-repo
+      name: Publish to agent deploy repo
+      action: github:repo:push
+      input:
+        description: This is an sample agent
+        sourcePath: ./agent-deploy
+        repoUrl: ${{parameters.repoUrl}}?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
+        defaultBranch: main
+
+    - id: create-provisioner-workflow
+      name: Create Provisioner Workflow
+      action: cnoe:kubernetes:apply
+      input:
+        namespaced: true
+        manifestPath: ./provisioner/workflow.yaml
+        clusterName: local
+        values:
+          name: ${{parameters.agentName}}
+          repoUrl: ${{parameters.repoUrl}}
+
+    - id: register
+      name: Register
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['publish-app-repo'].output.repoContentsUrl }}
+        catalogInfoPath: 'catalog-info.yaml'
+
+  output:
+    links:
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps['register'].output.entityRef }}

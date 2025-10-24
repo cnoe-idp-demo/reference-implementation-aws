@@ -1,0 +1,203 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: "{{ .Values.agentName }}"
+  namespace: {{ .Values.namespace }}
+spec:
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  webhook:
+    github:
+      port: "12000"
+      endpoint: /
+      method: POST
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: "{{ .Values.agentName }}-ci"
+  namespace: {{ .Values.namespace }}
+spec:
+  template:
+    serviceAccountName: operate-workflow-sa
+  dependencies:
+    - name: test-dep
+      eventSourceName: "{{ .Values.agentName }}"
+      eventName: github
+  triggers:
+    - template:
+        name: "{{ .Values.agentName }}-argo-workflow-trigger"
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: "ci-{{ .Values.agentName }}-"
+                namespace: {{ .Values.namespace }}
+                labels:
+                  env: dev
+                  entity-id: "{{ .Values.agentName }}"
+              spec:
+                serviceAccountName: admin
+                entrypoint: ci-build
+                arguments:
+                  parameters:
+                    - name: appName
+                      value: "{{ .Values.agentName}}"
+                    - name: apprepo
+                      value: "https://github.com/{{ .Values.githubOrg }}/{{ .Values.agentName}}"
+                    - name: branch
+                      value: main
+                    - name: deployrepo
+                      value: "github.com/{{ .Values.githubOrg }}/{{ .Values.agentName}}-deploy"
+                    - name: image
+                      value: "{{ .Values.imageBase }}/{{ .Values.agentName}}"
+                    - name: ecr-image
+                      value: "229560443702.dkr.ecr.us-west-2.amazonaws.com/{{ .Values.agentName}}"
+                    - name: commit_sha
+                      value: "{{`{{ .Input.body.head_commit.id | default .Input.body.after | default 'latest' }}`}}"
+                    - name: hostname
+                      value: {{ .Values.hostName }}
+                volumeClaimTemplates:
+                - metadata:
+                    name: workdir
+                  spec:
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: 256Mi
+                templates:
+                  - name: ci-build
+                    dag:
+                      tasks:
+                        - name: clone
+                          template: clonerepo
+                          arguments:
+                            parameters:
+                              - name: apprepo
+                                value: "{{`{{workflow.parameters.apprepo}}`}}"
+                              - name: branch
+                                value: "{{`{{workflow.parameters.branch}}`}}"
+                        
+                        - name: package-agent-code
+                          template: package-agent-code
+                          arguments:
+                            parameters:
+                              - name: s3_bucket
+                                value: "mmaroth-aip-cb-bucket"
+                              - name: appname
+                                value: "{{`{{workflow.parameters.appName}}`}}"
+                              - name: commit_sha
+                                value: "{{`{{workflow.parameters.commit_sha}}`}}"
+                          depends: "clone"
+                        
+                  - name: clonerepo
+                    inputs:
+                      parameters:
+                        - name: apprepo
+                        - name: branch
+                    container:
+                      volumeMounts:
+                        - mountPath: /workdir
+                          name: workdir
+                      image: alpine/git:v2.45.1
+                      workingDir: /workdir
+                      args:
+                        - clone
+                        - --depth
+                        - "1"
+                        - --branch
+                        - "{{`{{inputs.parameters.branch}}`}}"
+                        - --single-branch
+                        - "{{`{{inputs.parameters.apprepo}}`}}"
+                        - .
+                  
+                  - name: package-agent-code
+                    inputs:
+                      parameters:
+                        - name: s3_bucket
+                        - name: appname
+                        - name: commit_sha
+                    container:
+                      image: amazon/aws-cli:latest
+                      envFrom:
+                        - secretRef:
+                            name: aws-credentials
+                      volumeMounts:
+                      - name: workdir
+                        mountPath: /workdir
+                      workingDir: /workdir
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          tar -czvf {{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz Dockerfile agent.py pyproject.toml uv.lock
+                          aws s3 cp /workdir/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz s3://{{`{{inputs.parameters.s3_bucket}}`}}/{{`{{inputs.parameters.appname}}`}}/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz
+                
+                  - name: invoke-cd-workflow
+                    inputs:
+                      parameters:
+                        - name: hostname
+                        - name: cdpath
+                        - name: imageversion
+                    container:
+                      image: alpine:3.20
+                      envFrom:
+                        - secretRef:
+                            name: github-credentials
+                      volumeMounts:
+                          - mountPath: /workdir
+                            name: workdir
+                      workingDir: "/workdir"
+                      command: ["/bin/sh"]
+                      args:
+                        - -c
+                        - >-
+                          set -x &&
+                          apk add curl jq &&
+                          cd_workflow_url=https://{{`{{inputs.parameters.hostname}}`}}:443/argo-events/{{`{{inputs.parameters.cdpath}}`}} &&
+                          image_version={{`{{inputs.parameters.imageversion}}`}} &&
+                          curl -k -s -d '{"image_version":"'${image_version}'"}' -H "Content-Type: application/json" -X POST ${cd_workflow_url}
+          parameters:
+            - src:
+                dependencyName: test-dep
+                dataTemplate: "{{`{{ .Input.body.head_commit.id }}`}}"
+              dest: spec.arguments.parameters.6.value
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ .Values.agentName }}-webhook-es-ing"
+  namespace: {{ .Values.namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 512m
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.hostName }}
+      http:
+        paths:
+          - backend:
+              service:
+                name: "{{ .Values.agentName }}-eventsource-svc"
+                port:
+                  number: 12000
+            path: /argo-events/{{ .Values.agentName }}(/|$)(.*)
+            pathType: ImplementationSpecific
+    - host: localhost
+      http:
+        paths:
+          - backend:
+              service:
+                name: "{{ .Values.agentName }}-eventsource-svc"
+                port:
+                  number: 12000
+            path: /argo-events/{{ .Values.agentName }}(/|$)(.*)
+            pathType: ImplementationSpecific

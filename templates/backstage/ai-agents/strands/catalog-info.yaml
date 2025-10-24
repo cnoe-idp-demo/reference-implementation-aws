@@ -1,0 +1,51 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{values.name | dump}}
+  description: This is Agent Deploymnt
+  annotations:
+    backstage.io/kubernetes-label-selector: 'entity-id=${{values.name}}'
+    argocd/app-selector: 'entity-id=${{values.name}}'
+    backstage.io/kubernetes-cluster: workshop
+    argo-workflows.cnoe.io/cluster-name: local
+    argo-workflows.cnoe.io/namespace: ${{values.name}}
+    argo-workflows.cnoe.io/label-selector: 'entity-id=${{values.name}}'
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - url: https://${{values.repoHost}}:443/gitea/giteaAdmin/${{values.name}}
+      title: App Repo URL
+      icon: github
+spec:
+  owner: guests
+  lifecycle: experimental
+  type: agent
+  system: ${{values.name | dump}}
+  providesApis: ['api:${{values.name}}']
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: ${{values.name | dump}}
+  description: An example system for demonstration purposes
+  links:
+    - url: https://${{values.repoHost}}:443/gitea/giteaAdmin/${{values.name}}
+      title: App Repo URL
+      icon: github
+spec:
+  owner: guests
+  lifecycle: experimental
+  type: agent
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: ${{values.name | dump}}
+  description: AgentCore Agent AI
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: guests
+  system: ${{values.name}}
+  definition:
+    $text: ./swaggerdocs/swagger_apis.json

@@ -1,0 +1,19 @@
+[project]
+name = "lang-graph-agent"
+version = "0.1.0"
+description = "LangGraph agent implementation"
+requires-python = ">=3.11"
+dependencies = [
+    "langgraph",
+    "fastapi",
+    "nova-act",
+    "langchain-aws",
+    "langchain-community",
+    "pyjwt>=2.10.1",
+    "opentelemetry-instrumentation-langchain",
+    "bedrock-agentcore",
+    "bedrock-agentcore-starter-toolkit",
+    "duckduckgo-search",
+    "uvicorn[standard]>=0.37.0",
+    "ddgs",
+]
