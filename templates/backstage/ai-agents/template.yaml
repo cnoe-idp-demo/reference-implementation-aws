@@ -31,6 +31,20 @@ spec:
             - lang-graph
 
   steps:
+    - id: create-agent-repo
+      name: Create Agent Repository
+      action: github:repo:create
+      input:
+        repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
+        description: This is a sample agent
+
+    - id: create-deploy-repo
+      name: Create Deploy Repository
+      action: github:repo:create
+      input:
+        repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}-deploy
+        description: This is a sample agent deployment
+
     - id: deploy-template
       name: Generating application deployment template
       action: fetch:template
@@ -39,7 +53,7 @@ spec:
         targetPath: ./agent-deploy
         values:
           name: ${{parameters.agentName}}
-          repoUrl: https://github.com/cnoe-idp-demo/${{parameters.agentName}}
+          repoUrl: ${{ steps['create-agent-repo'].output.remoteUrl }}
 
     - id: agent-template
       name: Generating agent code template
@@ -65,7 +79,7 @@ spec:
       name: Publish to agent repo
       action: github:repo:push
       input:
-        description: This is an sample agent
+        description: This is a sample agent
         sourcePath: ./agent
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
         defaultBranch: main
@@ -74,10 +88,16 @@ spec:
       name: Publish to agent deploy repo
       action: github:repo:push
       input:
-        description: This is an sample agent
+        description: This is a sample agent deployment
         sourcePath: ./agent-deploy
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}-deploy
         defaultBranch: main
+
+    - id: wait
+      name: Waiting for the repos to be ready
+      action: "roadiehq:utils:sleep"
+      input:
+        amount: 5
 
     - id: create-provisioner-workflow
       name: Create Provisioner Workflow
@@ -94,7 +114,7 @@ spec:
       name: Register
       action: catalog:register
       input:
-        repoContentsUrl: ${{ steps['publish-app-repo'].output.repoContentsUrl }}
+        repoContentsUrl: ${{ steps['publish-2-app-repo'].output.repoContentsUrl }}
         catalogInfoPath: "catalog-info.yaml"
 
   output:
