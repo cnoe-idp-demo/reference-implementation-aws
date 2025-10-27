@@ -38,7 +38,6 @@ spec:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
         description: This is a sample agent
         repoVisibility: public
-        access: backstage-cnoe-mm
 
     - id: create-deploy-repo
       name: Create Deploy Repository
@@ -47,7 +46,6 @@ spec:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}-deploy
         description: This is a sample agent deployment
         repoVisibility: public
-        access: backstage-cnoe-mm
 
     - id: deploy-template
       name: Generating application deployment template
