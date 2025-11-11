@@ -36,10 +36,10 @@ spec:
       action: github:repo:create
       input:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
+        repoVisibility: public
         description: Sample Agent Code Repo
         values:
           repoHost: github.com
-          repoVisibility: public
           name: ${{parameters.agentName}}
 
     - id: create-deploy-repo
@@ -123,7 +123,7 @@ spec:
       action: catalog:register
       input:
         repoContentsUrl: ${{ steps['publish-2-app-repo'].output.repoContentsUrl }}
-        catalogInfoPath: catalog-info.yaml
+        catalogInfoPath: 'catalog-info.yaml'
 
   output:
     links:
