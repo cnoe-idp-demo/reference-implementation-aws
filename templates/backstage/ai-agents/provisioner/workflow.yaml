@@ -63,7 +63,7 @@ apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: github-app-org
-  namespace: mmtest01
+  namespace: ${{values.name}}
 spec:
   refreshInterval: "15m"
   secretStoreRef:
@@ -74,39 +74,39 @@ spec:
     template:
       data:
         type: git
-        url: '{{ .repoURL }}'
+        url: "{{ .repoURL }}"
         githubAppID: "{{ .appId }}"
         githubAppInstallationID: "{{ .installationId }}"
         githubAppPrivateKey: "{{ .privateKey }}"
   data:
-  - secretKey: appId
-    remoteRef:
-      conversionStrategy: Default # TODO: Remove when figured out how to avoid Diffs for CR defaults
-      decodingStrategy: None
-      key: cnoe-ref-impl/github-app
-      metadataPolicy: None
-      property: argocd-github.appId
-  - secretKey: installationId
-    remoteRef:
-      conversionStrategy: Default
-      decodingStrategy: None
-      key: cnoe-ref-impl/github-app
-      metadataPolicy: None
-      property: argocd-github.installationId
-  - secretKey: privateKey
-    remoteRef:
-      conversionStrategy: Default
-      decodingStrategy: None
-      key: cnoe-ref-impl/github-app
-      metadataPolicy: None
-      property: argocd-github.privateKey
-  - secretKey: repoURL
-    remoteRef:
-      conversionStrategy: Default
-      decodingStrategy: None
-      key: cnoe-ref-impl/github-app
-      metadataPolicy: None
-      property: argocd-github.url
+    - secretKey: appId
+      remoteRef:
+        conversionStrategy: Default # TODO: Remove when figured out how to avoid Diffs for CR defaults
+        decodingStrategy: None
+        key: cnoe-ref-impl/github-app
+        metadataPolicy: None
+        property: argocd-github.appId
+    - secretKey: installationId
+      remoteRef:
+        conversionStrategy: Default
+        decodingStrategy: None
+        key: cnoe-ref-impl/github-app
+        metadataPolicy: None
+        property: argocd-github.installationId
+    - secretKey: privateKey
+      remoteRef:
+        conversionStrategy: Default
+        decodingStrategy: None
+        key: cnoe-ref-impl/github-app
+        metadataPolicy: None
+        property: argocd-github.privateKey
+    - secretKey: repoURL
+      remoteRef:
+        conversionStrategy: Default
+        decodingStrategy: None
+        key: cnoe-ref-impl/github-app
+        metadataPolicy: None
+        property: argocd-github.url
 ---
 apiVersion: v1
 kind: Secret
@@ -194,7 +194,7 @@ spec:
                     - name: repobaseurl
                       value: ${{values.repoHost}}
                     - name: argoeventsBaseUrl
-                      value: ${{values.repoHost}}:443/argo-events
+                      value: ${{values.repoHost}}/argo-events
                     - name: repoHostName
                       value: ${{values.repoHost}}
                 volumeClaimTemplates:
@@ -230,15 +230,6 @@ spec:
                               - name: service-name
                                 value: "{{workflow.parameters.service-name}}"
                           depends: "clone-shared-helm-repo"
-                        - name: create-dockerconfig
-                          template: create-dockerconfig
-                          arguments:
-                            parameters:
-                              - name: github-url
-                                value: "https://github.com"
-                              - name: service-name
-                                value: "{{workflow.parameters.service-name}}"
-                          depends: "cicd-argocd-apps"
                         - name: clone-deploy-repo
                           template: clone-repo
                           arguments:
@@ -249,7 +240,7 @@ spec:
                                 value: "{{workflow.parameters.service-name}}-deploy"
                               - name: service-name
                                 value: "{{workflow.parameters.service-name}}"
-                          depends: "create-dockerconfig"
+                          depends: "cicd-argocd-apps"
                         - name: helm-folders-create
                           template: create-helm-env-directories
                           arguments:
@@ -301,15 +292,6 @@ spec:
                                 value: "{{workflow.parameters.service-name}}-deploy"
                               - name: webhook-url
                                 value: "https://{{workflow.parameters.argoeventsBaseUrl}}/{{workflow.parameters.service-name}}-provisioner"
-                          depends: "create-argocd-apps-for-services"
-                        - name: create-codebuild-project
-                          template: create-codebuild-project
-                          arguments:
-                            parameters:
-                              - name: service-name
-                                value: "{{workflow.parameters.service-name}}"
-                              - name: s3-url
-                                value: "mmaroth-aip-cb-bucket/{{workflow.parameters.service-name}}/"
                           depends: "create-argocd-apps-for-services"
                   - name: clone-repo
                     inputs:
@@ -474,14 +456,37 @@ spec:
                         - -c
                         - >-
                           set -x &&
-                          ls -lrt && pwd &&
-                          git status &&
+                          apk add --no-cache curl jq openssl &&
+                          echo "Generating GitHub App JWT token..." &&
+                          header='{"alg":"RS256","typ":"JWT"}' &&
+                          now=$(date +%s) &&
+                          iat=$((now - 60)) &&
+                          exp=$((now + 600)) &&
+                          payload='{"iat":'$iat',"exp":'$exp',"iss":"'$githubAppID'"}' &&
+                          header_base64=$(echo -n "$header" | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                          payload_base64=$(echo -n "$payload" | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                          header_payload="${header_base64}.${payload_base64}" &&
+                          echo "$githubAppPrivateKey" > /tmp/private_key.pem &&
+                          signature=$(echo -n "${header_payload}" | openssl dgst -binary -sha256 -sign /tmp/private_key.pem | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                          jwt="${header_payload}.${signature}" &&
+                          echo "Getting installation access token..." &&
+                          token_response=$(curl -s -X POST \
+                            -H "Authorization: Bearer ${jwt}" \
+                            -H "Accept: application/vnd.github+json" \
+                            "https://api.github.com/app/installations/${githubAppInstallationID}/access_tokens") &&
+                          access_token=$(echo "$token_response" | jq -r '.token') &&
+                          if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+                            echo "Failed to get access token: $token_response"
+                            exit 1
+                          fi &&
+                          echo "Pushing to repository..." &&
                           git config --global user.email "noreply@aws.com" &&
-                          git config --global user.name ARGO &&
-                          git remote set-url origin https://token:$GITHUB_TOKEN@{{inputs.parameters.deploy-repo}}.git &&
+                          git config --global user.name "ARGO" &&
+                          git remote set-url origin https://x-access-token:${access_token}@{{inputs.parameters.deploy-repo}}.git &&
                           git add . &&
                           git commit -m "Adding helm charts" &&
-                          git push --set-upstream origin main
+                          git push --set-upstream origin main &&
+                          rm -f /tmp/private_key.pem
                   - name: argo-cd-apps-for-services
                     inputs:
                       parameters:
@@ -536,61 +541,28 @@ spec:
                         - -c
                         - >-
                           set -x &&
-                          apk add curl jq &&
+                          apk add curl jq openssl &&
+                          now=$(date +%s) &&
+                          iat=$((now - 60)) &&
+                          exp=$((now + 600)) &&
+                          header='{"alg":"RS256","typ":"JWT"}' &&
+                          payload='{"iat":'$iat',"exp":'$exp',"iss":"'$githubAppID'"}' &&
+                          header_base64=$(echo -n "$header" | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                          payload_base64=$(echo -n "$payload" | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                          header_payload="${header_base64}.${payload_base64}" &&
+                          echo "$githubAppPrivateKey" > /tmp/private_key.pem &&
+                          signature=$(echo -n "${header_payload}" | openssl dgst -binary -sha256 -sign /tmp/private_key.pem | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                          jwt="${header_payload}.${signature}" &&
+                          installation_token=$(curl -s -X POST "{{inputs.parameters.github-url}}/app/installations/${githubAppInstallationID}/access_tokens" -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${jwt}" -H "X-GitHub-Api-Version: 2022-11-28" | jq -r '.token') &&
                           hooks_api_url={{inputs.parameters.github-url}}/repos/cnoe-idp-demo/{{inputs.parameters.repo-name}}/hooks &&
                           webhook_url={{inputs.parameters.webhook-url}} &&
-                          webhook_details=`curl -X 'GET' "${hooks_api_url}" -H "accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" | jq '.[].config.url'` &&
+                          webhook_details=`curl -X 'GET' "${hooks_api_url}" -H "accept: application/vnd.github+json" -H "Authorization: Bearer ${installation_token}" -H "X-GitHub-Api-Version: 2022-11-28" | jq '.[].config.url'` &&
                           if [ -z "$webhook_details" ]; then
                             echo "Webhook is not found, creating webhook with $webhook_url" 
-                            curl -X 'POST' "${hooks_api_url}" -H "accept: application/vnd.github+json" -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" -d '{"name": "web", "events": ["push"], "config": {"url": "'${webhook_url}'", "content_type": "json"}, "active": true}'
+                            curl -X 'POST' "${hooks_api_url}" -H "accept: application/vnd.github+json" -H "Authorization: Bearer ${installation_token}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" -d '{"name": "web", "events": ["push"], "config": {"url": "'${webhook_url}'", "content_type": "json"}, "active": true}'
                           else
                             echo "Webhook already exists"
                           fi
-                  - name: create-codebuild-project
-                    inputs:
-                      parameters:
-                        - name: service-name
-                        - name: s3-url
-                    container:
-                      image: amazon/aws-cli:2.15.30
-                      envFrom:
-                        - secretRef:
-                            name: aws-credentials
-                      volumeMounts:
-                        - mountPath: /workdir
-                          name: workdir
-                      workingDir: "/workdir"
-                      command: ["/bin/sh"]
-                      args:
-                        - -c
-                        - >-
-                          set -x &&
-                          SERVICE_NAME={{inputs.parameters.service-name}} &&
-                          S3_URL={{inputs.parameters.s3-url}} &&
-                          PROJECT_NAME="aip-${SERVICE_NAME}-build" &&
-                          
-                          echo "Creating CodeBuild project: $PROJECT_NAME" &&
-                          aws codebuild create-project \
-                            --name "$PROJECT_NAME" \
-                            --description "CodeBuild project for $SERVICE_NAME" \
-                            --source '{
-                              "type": "S3",
-                              "location": "'$S3_URL'",
-                              "buildspec": "buildspec.yml"
-                            }' \
-                            --artifacts '{
-                              "type": "NO_ARTIFACTS"
-                            }' \
-                            --environment '{
-                              "type": "ARM_CONTAINER",
-                              "image": "aws/codebuild/amazonlinux-aarch64-standard:3.0",
-                              "computeType": "BUILD_GENERAL1_SMALL",
-                              "privilegedMode": false,
-                              "imagePullCredentialsType": "CODEBUILD"
-                            }' \
-                            --service-role "arn:aws:iam::229560443702:role/service-role/codebuild-mmaroth-aip-codebuild-service-role" \
-                            --region us-west-2 || echo "Project may already exist or role not found" &&
-                          echo "CodeBuild project $PROJECT_NAME created successfully"
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
