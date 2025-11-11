@@ -36,9 +36,10 @@ spec:
       action: github:repo:create
       input:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
-        description: This is a sample agent
+        description: Sample Agent Code Repo
         values:
-          repoHost: mmaroth.people.aws.dev
+          repoHost: github.com
+          repoVisibility: public
           name: ${{parameters.agentName}}
 
     - id: create-deploy-repo
@@ -46,7 +47,8 @@ spec:
       action: github:repo:create
       input:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}-deploy
-        description: This is a sample agent deployment
+        repoVisibility: public
+        description: Sample Agent Deploy Repo
 
     - id: deploy-template
       name: Generating application deployment template
@@ -66,7 +68,7 @@ spec:
         targetPath: ./agent
         values:
           name: ${{parameters.agentName}}
-          repoHost: mmaroth.people.aws.dev
+          repoHost: github.com
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
 
     - id: provisioner-template
@@ -77,7 +79,7 @@ spec:
         targetPath: ./provisioner
         values:
           name: ${{parameters.agentName}}
-          repoHost: mmaroth.people.aws.dev
+          repoHost: github.com
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
 
     - id: publish-2-app-repo
@@ -100,7 +102,7 @@ spec:
 
     - id: wait
       name: Waiting for the repos to be ready
-      action: "roadiehq:utils:sleep"
+      action: roadiehq:utils:sleep
       input:
         amount: 5
 
@@ -113,7 +115,7 @@ spec:
         clusterName: local
         values:
           name: ${{parameters.agentName}}
-          repoHost: mmaroth.people.aws.dev
+          repoHost: github.com
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
 
     - id: register
@@ -121,7 +123,7 @@ spec:
       action: catalog:register
       input:
         repoContentsUrl: ${{ steps['publish-2-app-repo'].output.repoContentsUrl }}
-        catalogInfoPath: "catalog-info.yaml"
+        catalogInfoPath: catalog-info.yaml
 
   output:
     links:
