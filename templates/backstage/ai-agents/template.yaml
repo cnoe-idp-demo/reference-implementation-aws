@@ -37,6 +37,9 @@ spec:
       input:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
         description: This is a sample agent
+        values:
+          repoHost: mmaroth.people.aws.dev
+          name: ${{parameters.agentName}}
 
     - id: create-deploy-repo
       name: Create Deploy Repository
