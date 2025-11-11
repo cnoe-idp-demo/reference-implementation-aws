@@ -29,6 +29,36 @@ spec:
           enum:
             - strands
             - lang-graph
+    
+    - title: Agent Environment Configuration
+      properties:
+        envConfig:
+          title: Agent Environments
+          type: array
+          minItems: 1
+          ui:options:
+            addable: true
+            orderable: true
+            removable: true
+          items:
+            title: ''
+            type: object
+            required:
+              - environment
+              - clusterName
+            properties:
+              environment:
+                title: Environment Name
+                type: string
+                default: dev
+                description: Allowed values dev, stage, production, prod, preprod
+                pattern: '^(|dev|stage|production|prod|preprod)[0-9]*$'
+              clusterName:
+                title: Cluster
+                type: string
+                default: cnoe-ref-impl
+                enum:
+                  - 'cnoe-ref-impl'
 
   steps:
     - id: create-agent-repo
@@ -49,6 +79,10 @@ spec:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}-deploy
         repoVisibility: public
         description: Sample Agent Deploy Repo
+        values:
+          name: ${{parameters.agentName}}
+          repoHost: github.com
+          envConfig: ${{parameters.envConfig}}
 
     - id: deploy-template
       name: Generating application deployment template
