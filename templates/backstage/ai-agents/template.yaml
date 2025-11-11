@@ -66,6 +66,7 @@ spec:
         targetPath: ./agent
         values:
           name: ${{parameters.agentName}}
+          repoHost: mmaroth.people.aws.dev
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
 
     - id: provisioner-template
