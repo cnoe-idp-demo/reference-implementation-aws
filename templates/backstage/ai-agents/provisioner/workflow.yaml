@@ -298,6 +298,7 @@ spec:
                       parameters:
                         - name: repo-name
                         - name: target-dir
+                        - name: service-name
                     container:
                       volumeMounts:
                         - mountPath: /workdir
