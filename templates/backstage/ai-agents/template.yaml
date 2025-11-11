@@ -68,9 +68,6 @@ spec:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
         repoVisibility: public
         description: Sample Agent Code Repo
-        values:
-          repoHost: github.com
-          name: ${{parameters.agentName}}
 
     - id: create-deploy-repo
       name: Create Deploy Repository
@@ -79,10 +76,6 @@ spec:
         repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}-deploy
         repoVisibility: public
         description: Sample Agent Deploy Repo
-        values:
-          name: ${{parameters.agentName}}
-          repoHost: github.com
-          envConfig: ${{parameters.envConfig}}
 
     - id: deploy-template
       name: Generating application deployment template
@@ -93,6 +86,7 @@ spec:
         values:
           name: ${{parameters.agentName}}
           repoUrl: ${{ steps['create-agent-repo'].output.remoteUrl }}
+          envConfig: ${{parameters.envConfig}}
 
     - id: agent-template
       name: Generating agent code template
@@ -157,7 +151,7 @@ spec:
       action: catalog:register
       input:
         repoContentsUrl: ${{ steps['publish-2-app-repo'].output.repoContentsUrl }}
-        catalogInfoPath: 'catalog-info.yaml'
+        catalogInfoPath: "catalog-info.yaml"
 
   output:
     links:
