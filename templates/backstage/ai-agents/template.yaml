@@ -76,6 +76,7 @@ spec:
         targetPath: ./provisioner
         values:
           name: ${{parameters.agentName}}
+          repoHost: mmaroth.people.aws.dev
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
 
     - id: publish-2-app-repo
@@ -111,6 +112,7 @@ spec:
         clusterName: local
         values:
           name: ${{parameters.agentName}}
+          repoHost: mmaroth.people.aws.dev
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
 
     - id: register
