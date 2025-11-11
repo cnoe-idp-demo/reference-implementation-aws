@@ -28,7 +28,7 @@ subjects:
     namespace: ${{values.name}}
 roleRef:
   kind: ClusterRole
-  name: argo-aggregate-to-view
+  name: argo-workflows-view
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -42,7 +42,7 @@ subjects:
     namespace: ${{values.name}}
 roleRef:
   kind: ClusterRole
-  name: argo-server-cluster-role
+  name: argocd-server
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -59,23 +59,54 @@ roleRef:
   name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: github-credentials
-  namespace: ${{values.name}}
+  name: github-app-org
+  namespace: mmtest01
 spec:
+  refreshInterval: "15m"
   secretStoreRef:
-    name: github
+    name: aws-secretsmanager
     kind: ClusterSecretStore
-  refreshInterval: "0"
   target:
     name: github-credentials
+    template:
+      data:
+        type: git
+        url: '{{ .repoURL }}'
+        githubAppID: "{{ .appId }}"
+        githubAppInstallationID: "{{ .installationId }}"
+        githubAppPrivateKey: "{{ .privateKey }}"
   data:
-    - secretKey: GITHUB_TOKEN
-      remoteRef:
-        key: github-token
-        property: token
+  - secretKey: appId
+    remoteRef:
+      conversionStrategy: Default # TODO: Remove when figured out how to avoid Diffs for CR defaults
+      decodingStrategy: None
+      key: cnoe-ref-impl/github-app
+      metadataPolicy: None
+      property: argocd-github.appId
+  - secretKey: installationId
+    remoteRef:
+      conversionStrategy: Default
+      decodingStrategy: None
+      key: cnoe-ref-impl/github-app
+      metadataPolicy: None
+      property: argocd-github.installationId
+  - secretKey: privateKey
+    remoteRef:
+      conversionStrategy: Default
+      decodingStrategy: None
+      key: cnoe-ref-impl/github-app
+      metadataPolicy: None
+      property: argocd-github.privateKey
+  - secretKey: repoURL
+    remoteRef:
+      conversionStrategy: Default
+      decodingStrategy: None
+      key: cnoe-ref-impl/github-app
+      metadataPolicy: None
+      property: argocd-github.url
 ---
 apiVersion: v1
 kind: Secret
@@ -573,7 +604,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: ${{values.repoHost}}
+    - host: mmaroth.people.aws.dev
       http:
         paths:
           - backend:
