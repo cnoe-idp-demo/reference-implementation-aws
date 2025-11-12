@@ -314,7 +314,7 @@ spec:
                               - name: repo-name
                                 value: "{{workflow.parameters.service-name}}"
                               - name: webhook-url
-                                value: "https://maroth.people.aws.dev/argo-events/{{workflow.parameters.service-name}}"
+                                value: "https://mmaroth.people.aws.dev/argo-events/{{workflow.parameters.service-name}}"
                           depends: "create-argocd-apps-for-services"
                         - name: add-webhook-to-provisioner
                           template: github-webhook-creation
@@ -325,7 +325,7 @@ spec:
                               - name: repo-name
                                 value: "{{workflow.parameters.service-name}}-deploy"
                               - name: webhook-url
-                                value: "https://maroth.people.aws.dev/argo-events/{{workflow.parameters.service-name}}-provisioner"
+                                value: "https://mmaroth.people.aws.dev/argo-events/{{workflow.parameters.service-name}}-provisioner"
                           depends: "create-argocd-apps-for-services"
                   - name: clone-repo
                     inputs:

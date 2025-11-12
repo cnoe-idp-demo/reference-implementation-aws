@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: EventSource
 metadata:
   name: "{{ .Values.agentName }}"
-  namespace: { { .Values.namespace } }
+  namespace: {{ .Values.namespace }}
 spec:
   service:
     ports:
@@ -18,7 +18,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Sensor
 metadata:
   name: "{{ .Values.agentName }}-ci"
-  namespace: { { .Values.namespace } }
+  namespace: {{ .Values.namespace }}
 spec:
   template:
     serviceAccountName: operate-workflow-sa
@@ -37,7 +37,7 @@ spec:
               kind: Workflow
               metadata:
                 generateName: "ci-{{ .Values.agentName }}-"
-                namespace: { { .Values.namespace } }
+                namespace: {{ .Values.namespace }}
                 labels:
                   env: dev
                   entity-id: "{{ .Values.agentName }}"
@@ -63,7 +63,7 @@ spec:
                     - name: commit_sha
                       value: "{{`{{ .Input.body.head_commit.id | default .Input.body.after | default 'latest' }}`}}"
                     - name: hostname
-                      value: { { .Values.hostName } }
+                      value: {{ .Values.hostName }}
                 volumeClaimTemplates:
                   - metadata:
                       name: workdir
@@ -115,7 +115,9 @@ spec:
                         - --branch
                         - "{{`{{inputs.parameters.branch}}`}}"
                         - --single-branch
-                        - "{{`{{inputs.parameters.apprepo}}`}}"
+                        - "{{`{{inputs.parameters.apprepo}}`}}".git
+                        - -c
+                        - http.sslVerify=false
                         - .
 
                   - name: package-agent-code
@@ -197,7 +199,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Values.agentName }}-webhook-es-ing"
-  namespace: { { .Values.namespace } }
+  namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 512m
     nginx.ingress.kubernetes.io/use-regex: "true"
