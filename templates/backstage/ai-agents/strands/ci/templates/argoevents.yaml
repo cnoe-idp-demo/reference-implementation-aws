@@ -59,7 +59,7 @@ spec:
                     - name: image
                       value: "{{ .Values.imageBase }}/{{ .Values.agentName }}"
                     - name: commit_sha
-                      value: "{{`{{ .Input.body.head_commit.id | default .Input.body.after | default 'latest' }}`}}"
+                      value: latest
                     - name: hostname
                       value: {{ .Values.hostName }}
                 volumeClaimTemplates:
@@ -83,18 +83,6 @@ spec:
                               - name: branch
                                 value: "{{`{{workflow.parameters.branch}}`}}"
 
-                        - name: package-agent-code
-                          template: package-agent-code
-                          arguments:
-                            parameters:
-                              - name: s3_bucket
-                                value: "mmaroth-aip-cb-bucket"
-                              - name: appname
-                                value: "{{`{{workflow.parameters.appName}}`}}"
-                              - name: commit_sha
-                                value: "{{`{{workflow.parameters.commit_sha}}`}}"
-                          depends: "clone"
-                        
                         - name: build-arm64-image
                           template: build-image-with-kaniko
                           arguments:
@@ -103,7 +91,7 @@ spec:
                                 value: "{{`{{workflow.parameters.image}}`}}"
                               - name: tag-version
                                 value: "{{`{{workflow.parameters.commit_sha}}`}}"
-                          depends: "package-agent-code"
+                          depends: "clone"
 
                   - name: clonerepo
                     inputs:
@@ -136,9 +124,6 @@ spec:
                         - name: commit_sha
                     container:
                       image: amazon/aws-cli:latest
-                      envFrom:
-                        - secretRef:
-                            name: aws-credentials
                       volumeMounts:
                         - name: workdir
                           mountPath: /workdir
