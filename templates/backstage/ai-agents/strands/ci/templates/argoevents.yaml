@@ -115,7 +115,7 @@ spec:
                         - --branch
                         - "{{`{{inputs.parameters.branch}}`}}"
                         - --single-branch
-                        - "{{`{{inputs.parameters.apprepo}}`}}".git
+                        - "{{`{{inputs.parameters.apprepo}}`}}.git"
                         - -c
                         - http.sslVerify=false
                         - .
@@ -141,7 +141,7 @@ spec:
                         - >-
                           set -x &&
                           tar -czvf {{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz Dockerfile agent.py pyproject.toml uv.lock
-                          aws s3 cp /workdir/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz s3://{{`{{inputs.parameters.s3_bucket}}`}}/{{`{{inputs.parameters.appname}}`}}/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz
+                          # aws s3 cp /workdir/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz s3://{{`{{inputs.parameters.s3_bucket}}`}}/{{`{{inputs.parameters.appname}}`}}/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz
 
                   - name: build-image-with-kaniko
                     inputs:
