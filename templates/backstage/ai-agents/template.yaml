@@ -29,7 +29,7 @@ spec:
           enum:
             - strands
             - lang-graph
-    
+
     - title: Agent Environment Configuration
       properties:
         envConfig:
@@ -41,7 +41,7 @@ spec:
             orderable: true
             removable: true
           items:
-            title: ''
+            title: ""
             type: object
             required:
               - environment
@@ -52,13 +52,13 @@ spec:
                 type: string
                 default: dev
                 description: Allowed values dev, stage, production, prod, preprod
-                pattern: '^(|dev|stage|production|prod|preprod)[0-9]*$'
+                pattern: "^(|dev|stage|production|prod|preprod)[0-9]*$"
               clusterName:
                 title: Cluster
                 type: string
                 default: cnoe-ref-impl
                 enum:
-                  - 'cnoe-ref-impl'
+                  - "cnoe-ref-impl"
 
   steps:
     - id: create-agent-repo
@@ -151,7 +151,7 @@ spec:
       action: catalog:register
       input:
         repoContentsUrl: ${{ steps['publish-2-app-repo'].output.repoContentsUrl }}
-        catalogInfoPath: "catalog-info.yaml"
+        catalogInfoPath: "/catalog-info.yaml"
 
   output:
     links:
