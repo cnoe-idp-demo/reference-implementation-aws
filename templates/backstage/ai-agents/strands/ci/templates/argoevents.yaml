@@ -141,11 +141,31 @@ spec:
                       parameters:
                         - name: image
                         - name: tag-version
+                    volumes:
+                      - name: docker-config
+                        emptyDir: {}
+                    initContainers:
+                      - name: ecr-login
+                        image: amazon/aws-cli:latest
+                        volumeMounts:
+                          - name: docker-config
+                            mountPath: /root/.docker
+                        command:
+                          - /bin/sh
+                          - -c
+                          - |
+                            aws ecr get-login-password --region us-west-2 | \
+                            docker login --username AWS --password-stdin 229560443702.dkr.ecr.us-west-2.amazonaws.com || \
+                            (mkdir -p /root/.docker && \
+                            aws ecr get-login-password --region us-west-2 > /tmp/password && \
+                            echo "{\"auths\":{\"229560443702.dkr.ecr.us-west-2.amazonaws.com\":{\"auth\":\"$(echo -n AWS:$(cat /tmp/password) | base64)\"}}}" > /root/.docker/config.json)
                     container:
                       image: gcr.io/kaniko-project/executor:latest
                       volumeMounts:
                         - name: workdir
                           mountPath: /workdir
+                        - name: docker-config
+                          mountPath: /kaniko/.docker
                       workingDir: /workdir/agent
                       resources:
                         limits:
