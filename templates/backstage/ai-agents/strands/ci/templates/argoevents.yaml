@@ -115,7 +115,7 @@ spec:
                         - mountPath: /workdir
                           name: workdir
                       image: alpine/git:v2.45.1
-                      workingDir: /workdir
+                      workingDir: /workdir/agent
                       args:
                         - clone
                         - --depth
@@ -142,7 +142,7 @@ spec:
                       volumeMounts:
                         - name: workdir
                           mountPath: /workdir
-                      workingDir: /workdir
+                      workingDir: /workdir/agent
                       command: ["/bin/sh"]
                       args:
                         - -c
@@ -161,7 +161,7 @@ spec:
                       volumeMounts:
                         - name: workdir
                           mountPath: /workdir
-                      workingDir: /workdir
+                      workingDir: /workdir/agent
                       resources:
                         limits:
                           cpu: 1
