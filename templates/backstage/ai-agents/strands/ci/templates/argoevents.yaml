@@ -154,11 +154,9 @@ spec:
                           - /bin/sh
                           - -c
                           - |
-                            aws ecr get-login-password --region us-west-2 | \
-                            docker login --username AWS --password-stdin 229560443702.dkr.ecr.us-west-2.amazonaws.com || \
-                            (mkdir -p /root/.docker && \
-                            aws ecr get-login-password --region us-west-2 > /tmp/password && \
-                            echo "{\"auths\":{\"229560443702.dkr.ecr.us-west-2.amazonaws.com\":{\"auth\":\"$(echo -n AWS:$(cat /tmp/password) | base64)\"}}}" > /root/.docker/config.json)
+                            mkdir -p /root/.docker
+                            PASSWORD=$(aws ecr get-login-password --region us-west-2)
+                            echo "{\"auths\":{\"229560443702.dkr.ecr.us-west-2.amazonaws.com\":{\"auth\":\"$(echo -n AWS:${PASSWORD} | base64)\"}}}" > /root/.docker/config.json
                     container:
                       image: gcr.io/kaniko-project/executor:latest
                       volumeMounts:
