@@ -280,7 +280,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: {{ .Values.hostName }}
+    - host: mmaroth.people.aws.dev
       http:
         paths:
           - backend:
@@ -300,3 +300,7 @@ spec:
                   number: 12000
             path: /argo-events/{{ .Values.serviceName }}-deploy(/|$)(.*)
             pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - mmaroth.people.aws.dev
+      secretName: argo-workflows-server-tls

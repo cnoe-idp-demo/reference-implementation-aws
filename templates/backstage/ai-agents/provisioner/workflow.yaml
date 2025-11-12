@@ -62,6 +62,40 @@ roleRef:
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
+  name: argo-workflows-server-tls
+  namespace: ${{values.name}}
+spec:
+  data:
+  - remoteRef:
+      conversionStrategy: Default
+      decodingStrategy: None
+      key: default-tls-prod
+      metadataPolicy: None
+      property: tls.key
+    secretKey: tls.key
+  - remoteRef:
+      conversionStrategy: Default
+      decodingStrategy: None
+      key: default-tls-prod
+      metadataPolicy: None
+      property: tls.crt
+    secretKey: tls.crt
+  refreshInterval: '0'
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: default-cert
+  target:
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    name: argo-events-tls
+    template:
+      engineVersion: v2
+      mergePolicy: Replace
+      type: kubernetes.io/tls
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
   name: github-app-org
   namespace: ${{values.name}}
 spec:
@@ -194,7 +228,7 @@ spec:
                     - name: repobaseurl
                       value: ${{values.repoHost}}
                     - name: argoeventsBaseUrl
-                      value: ${{values.repoHost}}/argo-events
+                      value: mmaroth.people.aws.dev/argo-events
                     - name: repoHostName
                       value: ${{values.repoHost}}
                 volumeClaimTemplates:
@@ -280,7 +314,7 @@ spec:
                               - name: repo-name
                                 value: "{{workflow.parameters.service-name}}"
                               - name: webhook-url
-                                value: "https://{{workflow.parameters.argoeventsBaseUrl}}/{{workflow.parameters.service-name}}"
+                                value: "https://maroth.people.aws.dev/argo-events/{{workflow.parameters.service-name}}"
                           depends: "create-argocd-apps-for-services"
                         - name: add-webhook-to-provisioner
                           template: github-webhook-creation
@@ -291,7 +325,7 @@ spec:
                               - name: repo-name
                                 value: "{{workflow.parameters.service-name}}-deploy"
                               - name: webhook-url
-                                value: "https://{{workflow.parameters.argoeventsBaseUrl}}/{{workflow.parameters.service-name}}-provisioner"
+                                value: "https://maroth.people.aws.dev/argo-events/{{workflow.parameters.service-name}}-provisioner"
                           depends: "create-argocd-apps-for-services"
                   - name: clone-repo
                     inputs:
@@ -597,6 +631,10 @@ spec:
                   number: 12000
             path: /argo-events/${{values.name}}-provisioner(/|$)(.*)
             pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - mmaroth.people.aws.dev
+      secretName: argo-workflows-server-tls
 ---
 apiVersion: batch/v1
 kind: Job

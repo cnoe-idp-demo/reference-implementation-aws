@@ -1,9 +1,4 @@
 agentName: ${{values.name}}
-
 namespace: ${{values.name}}
-
-hostName: ${{values.repoHost}}
-
-giteaBaseUrl: ${{values.repoHost}}:443/gitea/giteaAdmin
-
-imageBase: ${{values.repoHost}}:443/gitea/giteaadmin
+hostName: mmaroth.people.aws.dev
+imageBase: 229560443702.dkr.ecr.us-west-2.amazonaws.com

@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: EventSource
 metadata:
   name: "{{ .Values.agentName }}"
-  namespace: {{ .Values.namespace }}
+  namespace: { { .Values.namespace } }
 spec:
   service:
     ports:
@@ -18,7 +18,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Sensor
 metadata:
   name: "{{ .Values.agentName }}-ci"
-  namespace: {{ .Values.namespace }}
+  namespace: { { .Values.namespace } }
 spec:
   template:
     serviceAccountName: operate-workflow-sa
@@ -37,39 +37,41 @@ spec:
               kind: Workflow
               metadata:
                 generateName: "ci-{{ .Values.agentName }}-"
-                namespace: {{ .Values.namespace }}
+                namespace: { { .Values.namespace } }
                 labels:
                   env: dev
                   entity-id: "{{ .Values.agentName }}"
               spec:
-                serviceAccountName: admin
+                serviceAccountName: ci-workflow-sa
                 entrypoint: ci-build
+                nodeSelector:
+                  kubernetes.io/arch: arm64
                 arguments:
                   parameters:
                     - name: appName
                       value: "{{ .Values.agentName}}"
                     - name: apprepo
-                      value: "https://github.com/{{ .Values.githubOrg }}/{{ .Values.agentName}}"
+                      value: "https://github.com/cnoe-idp-demo/{{ .Values.agentName }}"
                     - name: branch
                       value: main
                     - name: deployrepo
-                      value: "github.com/{{ .Values.githubOrg }}/{{ .Values.agentName}}-deploy"
+                      value: "https://github.com/cnoe-idp-demo//{{ .Values.agentName}}-deploy"
                     - name: image
-                      value: "{{ .Values.imageBase }}/{{ .Values.agentName}}"
+                      value: "{{ .Values.imageBase }}/{{ .Values.agentName }}"
                     - name: ecr-image
                       value: "229560443702.dkr.ecr.us-west-2.amazonaws.com/{{ .Values.agentName}}"
                     - name: commit_sha
                       value: "{{`{{ .Input.body.head_commit.id | default .Input.body.after | default 'latest' }}`}}"
                     - name: hostname
-                      value: {{ .Values.hostName }}
+                      value: { { .Values.hostName } }
                 volumeClaimTemplates:
-                - metadata:
-                    name: workdir
-                  spec:
-                    accessModes: ["ReadWriteOnce"]
-                    resources:
-                      requests:
-                        storage: 256Mi
+                  - metadata:
+                      name: workdir
+                    spec:
+                      accessModes: ["ReadWriteOnce"]
+                      resources:
+                        requests:
+                          storage: 256Mi
                 templates:
                   - name: ci-build
                     dag:
@@ -82,7 +84,7 @@ spec:
                                 value: "{{`{{workflow.parameters.apprepo}}`}}"
                               - name: branch
                                 value: "{{`{{workflow.parameters.branch}}`}}"
-                        
+
                         - name: package-agent-code
                           template: package-agent-code
                           arguments:
@@ -94,7 +96,7 @@ spec:
                               - name: commit_sha
                                 value: "{{`{{workflow.parameters.commit_sha}}`}}"
                           depends: "clone"
-                        
+
                   - name: clonerepo
                     inputs:
                       parameters:
@@ -115,7 +117,7 @@ spec:
                         - --single-branch
                         - "{{`{{inputs.parameters.apprepo}}`}}"
                         - .
-                  
+
                   - name: package-agent-code
                     inputs:
                       parameters:
@@ -128,8 +130,8 @@ spec:
                         - secretRef:
                             name: aws-credentials
                       volumeMounts:
-                      - name: workdir
-                        mountPath: /workdir
+                        - name: workdir
+                          mountPath: /workdir
                       workingDir: /workdir
                       command: ["/bin/sh"]
                       args:
@@ -138,7 +140,29 @@ spec:
                           set -x &&
                           tar -czvf {{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz Dockerfile agent.py pyproject.toml uv.lock
                           aws s3 cp /workdir/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz s3://{{`{{inputs.parameters.s3_bucket}}`}}/{{`{{inputs.parameters.appname}}`}}/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz
-                
+
+                  - name: build-image-with-kaniko
+                    inputs:
+                      parameters:
+                        - name: image
+                        - name: tag-version
+                    container:
+                      image: gcr.io/kaniko-project/executor:latest
+                      volumeMounts:
+                        - name: workdir
+                          mountPath: /workdir
+                      workingDir: /workdir
+                      resources:
+                        limits:
+                          cpu: 1
+                          memory: 2Gi
+                      args:
+                        - --dockerfile=Dockerfile
+                        - --context=.
+                        - --destination={{`{{inputs.parameters.image}}`}}:{{`{{inputs.parameters.tag-version}}`}}
+                        - --cache=false
+                        - --custom-platform=linux/arm64
+
                   - name: invoke-cd-workflow
                     inputs:
                       parameters:
@@ -151,8 +175,8 @@ spec:
                         - secretRef:
                             name: github-credentials
                       volumeMounts:
-                          - mountPath: /workdir
-                            name: workdir
+                        - mountPath: /workdir
+                          name: workdir
                       workingDir: "/workdir"
                       command: ["/bin/sh"]
                       args:
@@ -173,7 +197,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Values.agentName }}-webhook-es-ing"
-  namespace: {{ .Values.namespace }}
+  namespace: { { .Values.namespace } }
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 512m
     nginx.ingress.kubernetes.io/use-regex: "true"
@@ -181,7 +205,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: {{ .Values.hostName }}
+    - host: mmaroth.people.aws.dev
       http:
         paths:
           - backend:
@@ -201,3 +225,7 @@ spec:
                   number: 12000
             path: /argo-events/{{ .Values.agentName }}(/|$)(.*)
             pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - mmaroth.people.aws.dev
+      secretName: argo-workflows-server-tls
