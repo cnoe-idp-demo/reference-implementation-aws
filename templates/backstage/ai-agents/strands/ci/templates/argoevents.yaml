@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: EventSource
 metadata:
   name: "{{ .Values.agentName }}"
-  namespace: {{ .Values.namespace }}
+  namespace: { { .Values.namespace } }
 spec:
   service:
     ports:
@@ -18,7 +18,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Sensor
 metadata:
   name: "{{ .Values.agentName }}-ci"
-  namespace: {{ .Values.namespace }}
+  namespace: { { .Values.namespace } }
 spec:
   template:
     serviceAccountName: operate-workflow-sa
@@ -37,7 +37,7 @@ spec:
               kind: Workflow
               metadata:
                 generateName: "ci-{{ .Values.agentName }}-"
-                namespace: {{ .Values.namespace }}
+                namespace: { { .Values.namespace } }
                 labels:
                   env: dev
                   entity-id: "{{ .Values.agentName }}"
@@ -61,7 +61,7 @@ spec:
                     - name: commit_sha
                       value: latest
                     - name: hostname
-                      value: {{ .Values.hostName }}
+                      value: { { .Values.hostName } }
                 volumeClaimTemplates:
                   - metadata:
                       name: workdir
@@ -91,6 +91,8 @@ spec:
                                 value: "{{`{{workflow.parameters.image}}`}}"
                               - name: tag-version
                                 value: "{{`{{workflow.parameters.commit_sha}}`}}"
+                              - name: image-name
+                                value: { { .Values.agentName } }
                           depends: "clone"
 
                   - name: clonerepo
@@ -141,6 +143,7 @@ spec:
                       parameters:
                         - name: image
                         - name: tag-version
+                        - name: image-name
                     volumes:
                       - name: docker-config
                         emptyDir: {}
@@ -156,7 +159,9 @@ spec:
                           - |
                             mkdir -p /root/.docker
                             PASSWORD=$(aws ecr get-login-password --region us-west-2)
-                            echo "{\"auths\":{\"229560443702.dkr.ecr.us-west-2.amazonaws.com\":{\"auth\":\"$(echo -n AWS:${PASSWORD} | base64)\"}}}" > /root/.docker/config.json
+                            aws ecr create-repository --repository-name {{`{{inputs.parameters.image-name}}`}} --region us-west-2 2>/dev/null || echo "Already exists"
+                            AUTH=$(printf "AWS:%s" "${PASSWORD}" | base64 | tr -d '\n')
+                            printf '{"auths":{"229560443702.dkr.ecr.us-west-2.amazonaws.com":{"auth":"%s"}}}' "${AUTH}" > /root/.docker/config.json
                     container:
                       image: gcr.io/kaniko-project/executor:latest
                       volumeMounts:
@@ -210,7 +215,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Values.agentName }}-webhook-es-ing"
-  namespace: {{ .Values.namespace }}
+  namespace: { { .Values.namespace } }
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 512m
     nginx.ingress.kubernetes.io/use-regex: "true"
