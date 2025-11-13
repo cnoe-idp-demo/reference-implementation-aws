@@ -42,7 +42,7 @@ spec:
                   env: dev
                   entity-id: "{{ .Values.agentName }}"
               spec:
-                serviceAccountName: admin
+                serviceAccountName: ci-workflow-sa
                 entrypoint: deploy-workflow
                 arguments:
                   parameters:
