@@ -11,6 +11,9 @@ global:
 image:
   repository: bitnamilegacy/keycloak
 
+nodeSelector:
+  kubernetes.io/arch: amd64
+
 auth:
   adminUser: cnoe-admin
   adminPassword: cnoe-admin
