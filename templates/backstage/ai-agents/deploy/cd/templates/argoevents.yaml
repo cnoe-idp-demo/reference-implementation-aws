@@ -173,10 +173,11 @@ spec:
                         - >-  
                           set -x &&
                           apk add --no-cache curl jq openssl &&
+                          pwd &&
+                          ls -lrt &&
                           repo={{`{{inputs.parameters.deployrepo}}`}} &&
-                          repo_name=`echo -n $repo | awk -F/ '{print $NF}'` &&
                           env_name={{`{{inputs.parameters.envname}}`}} &&
-                          cd $repo_name/environments/$env_name &&
+                          cd environments/$env_name &&
                           image_version={{`{{inputs.parameters.tag-version}}`}} &&
                           sed -i "s/tag: .*/tag: $image_version/g" values.yaml &&
                           cat values.yaml &&
