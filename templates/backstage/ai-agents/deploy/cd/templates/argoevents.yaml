@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: EventSource
 metadata:
-  name: "{{ .Values.serviceName }}-deploy"
+  name: "{{ .Values.agentName }}-deploy"
   namespace: {{ .Values.namespace }}
 spec:
   service:
@@ -17,18 +17,18 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Sensor
 metadata:
-  name: "{{ .Values.serviceName }}-deploy"
+  name: "{{ .Values.agentName }}-deploy"
   namespace: {{ .Values.namespace }}
 spec:
   template:
     serviceAccountName: operate-workflow-sa
   dependencies:
     - name: test-dep
-      eventSourceName: "{{ .Values.serviceName }}-deploy"
+      eventSourceName: "{{ .Values.agentName }}-deploy"
       eventName: github
   triggers:
     - template:
-        name: "{{ .Values.serviceName }}-deploy-argo-workflow-trigger"
+        name: "{{ .Values.agentName }}-deploy-argo-workflow-trigger"
         argoWorkflow:
           operation: submit
           source:
@@ -36,18 +36,18 @@ spec:
               apiVersion: argoproj.io/v1alpha1
               kind: Workflow
               metadata:
-                generateName: "cd-{{ .Values.serviceName }}-"
+                generateName: "cd-{{ .Values.agentName }}-"
                 namespace: {{ .Values.namespace }}
                 labels:
                   env: dev
-                  entity-id: "{{ .Values.serviceName }}"
+                  entity-id: "{{ .Values.agentName }}"
               spec:
                 serviceAccountName: admin
                 entrypoint: deploy-workflow
                 arguments:
                   parameters:
                     - name: deployrepo
-                      value: "{{ .Values.giteaBaseUrl }}/{{ .Values.serviceName}}-deploy"
+                      value: "github.com/cnoe-idp-demo/{{ .Values.agentName}}-deploy"
                     - name: image-tag
                       value: "0.0.1"
                 volumeClaimTemplates:
@@ -106,27 +106,28 @@ spec:
                               - name: envname
                                 value: "{{`{{inputs.parameters.envname}}`}}"
                           depends: "clone-deploy-repo"
-                        - name: sync-argocd-app
-                          template: sync-argocd-app
-                          when: "'{{`{{tasks.update-image-version.outputs.parameters.argocd_flag}}`}}' == 'execute_cd'"
-                          arguments:
-                            parameters:
-                              - name: appname
-                                value: "{{`{{inputs.parameters.envname}}`}}-{{ .Values.serviceName }}"
-                              - name: envname
-                                value: "{{`{{inputs.parameters.envname}}`}}"
-                          depends: "update-image-version"
+                        # - name: sync-argocd-app
+                        #   template: sync-argocd-app
+                        #   when: "'{{`{{tasks.update-image-version.outputs.parameters.argocd_flag}}`}}' == 'execute_cd'"
+                        #   arguments:
+                        #     parameters:
+                        #       - name: appname
+                        #         value: "{{`{{inputs.parameters.envname}}`}}-{{ .Values.agentName }}"
+                        #       - name: envname
+                        #         value: "{{`{{inputs.parameters.envname}}`}}"
+                        #   depends: "update-image-version"
                         
-                        - name: wait-for-app-sync
-                          template: wait-for-sync
-                          when: "'{{`{{tasks.update-image-version.outputs.parameters.argocd_flag}}`}}' == 'execute_cd'"
-                          arguments:
-                            parameters:
-                              - name: appname
-                                value: "{{`{{inputs.parameters.envname}}`}}-{{ .Values.serviceName }}"
-                              - name: envname
-                                value: "{{`{{inputs.parameters.envname}}`}}"
-                          depends: "sync-argocd-app"
+                        # - name: wait-for-app-sync
+                        #   template: wait-for-sync
+                        #   when: "'{{`{{tasks.update-image-version.outputs.parameters.argocd_flag}}`}}' == 'execute_cd'"
+                        #   arguments:
+                        #     parameters:
+                        #       - name: appname
+                        #         value: "{{`{{inputs.parameters.envname}}`}}-{{ .Values.agentName }}"
+                        #       - name: envname
+                        #         value: "{{`{{inputs.parameters.envname}}`}}"
+                        #   depends: "sync-argocd-app"
+                  
                   - name: clonerepo
                     inputs:
                       parameters:
@@ -164,32 +165,55 @@ spec:
                       image: alpine/git:v2.45.1
                       envFrom:
                         - secretRef:
-                            name: gitea-credentials
+                            name: github-credentials
                       workingDir: /workdir/{{`{{inputs.parameters.envname}}`}}
                       command: ["/bin/sh"]
                       args:
                         - -c
                         - >-  
                           set -x &&
-                          mkdir deploy-repo && cd deploy-repo &&
-                          git clone https://{{`{{inputs.parameters.deployrepo}}`}}.git -c http.sslVerify=false &&
+                          apk add --no-cache curl jq openssl &&
                           repo={{`{{inputs.parameters.deployrepo}}`}} &&
                           repo_name=`echo -n $repo | awk -F/ '{print $NF}'` &&
                           env_name={{`{{inputs.parameters.envname}}`}} &&
                           cd $repo_name/environments/$env_name &&
                           image_version={{`{{inputs.parameters.tag-version}}`}} &&
-                          sed -i "s/  tag: .*/  tag: $image_version/g" values.yaml &&
+                          sed -i "s/tag: .*/tag: $image_version/g" values.yaml &&
                           cat values.yaml &&
                           git status &&
                           echo -n "execute_cd" > /workdir/cd_argo_flag.txt &&
                           m_count=$(git status -s | wc -l) &&
                           if [ $m_count == 1 ]; then
-                            git config --global user.email "noreply@aws.com" 
-                            git config --global user.name ARGO
-                            git remote set-url origin https://$GITEA_USERNAME:$GITEA_TOKEN@{{`{{inputs.parameters.deployrepo}}`}}.git
-                            git add values.yaml
-                            git commit -m "Updated image version to $image_version"
-                            git push --set-upstream origin main
+                            echo "Generating GitHub App JWT token..." &&
+                            header='{"alg":"RS256","typ":"JWT"}' &&
+                            now=$(date +%s) &&
+                            iat=$((now - 60)) &&
+                            exp=$((now + 600)) &&
+                            payload='{"iat":'$iat',"exp":'$exp',"iss":"'$githubAppID'"}' &&
+                            header_base64=$(echo -n "$header" | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                            payload_base64=$(echo -n "$payload" | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                            header_payload="${header_base64}.${payload_base64}" &&
+                            echo "$githubAppPrivateKey" > /tmp/private_key.pem &&
+                            signature=$(echo -n "${header_payload}" | openssl dgst -binary -sha256 -sign /tmp/private_key.pem | base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n') &&
+                            jwt="${header_payload}.${signature}" &&
+                            echo "Getting installation access token..." &&
+                            token_response=$(curl -s -X POST \
+                              -H "Authorization: Bearer ${jwt}" \
+                              -H "Accept: application/vnd.github+json" \
+                              "https://api.github.com/app/installations/${githubAppInstallationID}/access_tokens") &&
+                            access_token=$(echo "$token_response" | jq -r '.token') &&
+                            if [ "$access_token" = "null" ] || [ -z "$access_token" ]; then
+                              echo "Failed to get access token: $token_response"
+                              exit 1
+                            fi &&
+                            echo "Pushing to repository..." &&
+                            git config --global user.email "noreply@aws.com" &&
+                            git config --global user.name "ARGO" &&
+                            git remote set-url origin https://x-access-token:${access_token}@{{`{{inputs.parameters.deployrepo}}`}}.git &&
+                            git add values.yaml &&
+                            git commit -m "Updated image version to $image_version" &&
+                            git push --set-upstream origin main &&
+                            rm -f /tmp/private_key.pem
                           else
                             echo "No updates to values file, skipping git push"
                             echo -n "skip_cd" > /workdir/cd_argo_flag.txt
@@ -271,7 +295,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: "{{ .Values.serviceName }}-deploy-webhook-es-ing"
+  name: "{{ .Values.agentName }}-deploy-webhook-es-ing"
   namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 512m
@@ -285,20 +309,20 @@ spec:
         paths:
           - backend:
               service:
-                name: "{{ .Values.serviceName }}-deploy-eventsource-svc"
+                name: "{{ .Values.agentName }}-deploy-eventsource-svc"
                 port:
                   number: 12000
-            path: /argo-events/{{ .Values.serviceName }}-deploy(/|$)(.*)
+            path: /argo-events/{{ .Values.agentName }}-deploy(/|$)(.*)
             pathType: ImplementationSpecific
     - host: localhost
       http:
         paths:
           - backend:
               service:
-                name: "{{ .Values.serviceName }}-deploy-eventsource-svc"
+                name: "{{ .Values.agentName }}-deploy-eventsource-svc"
                 port:
                   number: 12000
-            path: /argo-events/{{ .Values.serviceName }}-deploy(/|$)(.*)
+            path: /argo-events/{{ .Values.agentName }}-deploy(/|$)(.*)
             pathType: ImplementationSpecific
   tls:
     - hosts:

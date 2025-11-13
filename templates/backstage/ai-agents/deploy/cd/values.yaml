@@ -1,9 +1,6 @@
-serviceName:  ${{values.name}}
-
+agentName:  ${{values.name}}
 namespace:  ${{values.name}}
-
-hostName: ${{values.repoHost}}
-
+imageRepo: 229560443702.dkr.ecr.us-west-2.amazonaws.com/${{values.name}}
 giteaBaseUrl: ${{values.repoHost}}:443/gitea/giteaAdmin
 
 imageBase: ${{values.repoHost}}:443/gitea/giteaadmin

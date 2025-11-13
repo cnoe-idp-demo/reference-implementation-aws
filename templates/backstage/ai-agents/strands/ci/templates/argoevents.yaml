@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: EventSource
 metadata:
   name: "{{ .Values.agentName }}"
-  namespace: { { .Values.namespace } }
+  namespace: {{ .Values.namespace }}
 spec:
   service:
     ports:
@@ -18,7 +18,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Sensor
 metadata:
   name: "{{ .Values.agentName }}-ci"
-  namespace: { { .Values.namespace } }
+  namespace: {{ .Values.namespace }}
 spec:
   template:
     serviceAccountName: operate-workflow-sa
@@ -37,7 +37,7 @@ spec:
               kind: Workflow
               metadata:
                 generateName: "ci-{{ .Values.agentName }}-"
-                namespace: { { .Values.namespace } }
+                namespace: {{ .Values.namespace }}
                 labels:
                   env: dev
                   entity-id: "{{ .Values.agentName }}"
@@ -61,7 +61,7 @@ spec:
                     - name: commit_sha
                       value: latest
                     - name: hostname
-                      value: { { .Values.hostName } }
+                      value: {{ .Values.hostName }}
                 volumeClaimTemplates:
                   - metadata:
                       name: workdir
@@ -92,8 +92,16 @@ spec:
                               - name: tag-version
                                 value: "{{`{{workflow.parameters.commit_sha}}`}}"
                               - name: image-name
-                                value: { { .Values.agentName } }
+                                value: {{ .Values.agentName }}
                           depends: "clone"
+                        
+                        - name: invoke-cd-workflow
+                          template: invoke-cd-workflow
+                          arguments:
+                            parameters:
+                              - name: tag_version
+                                value: "{{`{{workflow.parameters.commit_sha}}`}}"
+                          depends: "build-arm64-image"
 
                   - name: clonerepo
                     inputs:
@@ -117,26 +125,6 @@ spec:
                         - -c
                         - http.sslVerify=false
                         - .
-
-                  - name: package-agent-code
-                    inputs:
-                      parameters:
-                        - name: s3_bucket
-                        - name: appname
-                        - name: commit_sha
-                    container:
-                      image: amazon/aws-cli:latest
-                      volumeMounts:
-                        - name: workdir
-                          mountPath: /workdir
-                      workingDir: /workdir/agent
-                      command: ["/bin/sh"]
-                      args:
-                        - -c
-                        - >-
-                          set -x &&
-                          tar -czvf {{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz Dockerfile agent.py pyproject.toml uv.lock
-                          # aws s3 cp /workdir/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz s3://{{`{{inputs.parameters.s3_bucket}}`}}/{{`{{inputs.parameters.appname}}`}}/{{`{{inputs.parameters.appname}}`}}-{{`{{workflow.parameters.commit_sha}}`}}.tar.gz
 
                   - name: build-image-with-kaniko
                     inputs:
@@ -184,14 +172,9 @@ spec:
                   - name: invoke-cd-workflow
                     inputs:
                       parameters:
-                        - name: hostname
-                        - name: cdpath
-                        - name: imageversion
+                        - name: tag_version
                     container:
                       image: alpine:3.20
-                      envFrom:
-                        - secretRef:
-                            name: github-credentials
                       volumeMounts:
                         - mountPath: /workdir
                           name: workdir
@@ -202,9 +185,9 @@ spec:
                         - >-
                           set -x &&
                           apk add curl jq &&
-                          cd_workflow_url=https://{{`{{inputs.parameters.hostname}}`}}:443/argo-events/{{`{{inputs.parameters.cdpath}}`}} &&
-                          image_version={{`{{inputs.parameters.imageversion}}`}} &&
-                          curl -k -s -d '{"image_version":"'${image_version}'"}' -H "Content-Type: application/json" -X POST ${cd_workflow_url}
+                          echo "Triggerring CD Workflow" &&
+                          image_version={{`{{inputs.parameters.tag_version}}`}} &&
+                          curl -k -s -d '{"image_version":"'${image_version}'"}' -H "Content-Type: application/json" -X POST ${{values.name}}-deploy-eventsource-svc:12000/
           parameters:
             - src:
                 dependencyName: test-dep
@@ -215,7 +198,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "{{ .Values.agentName }}-webhook-es-ing"
-  namespace: { { .Values.namespace } }
+  namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 512m
     nginx.ingress.kubernetes.io/use-regex: "true"

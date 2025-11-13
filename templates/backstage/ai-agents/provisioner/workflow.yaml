@@ -438,8 +438,6 @@ spec:
                           apk add yq &&
                           ls -lrt && pwd &&
                           sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/app-deploy/values.yaml &&
-                          sed -i "s/REGISTRY_HOST/{{ inputs.parameters.host-name }}/g" /workdir/shared-repo/app-deploy/values.yaml &&
-                          sed -i "s/INGRESS_HOST/{{ inputs.parameters.host-name }}/g" /workdir/shared-repo/app-deploy/values.yaml &&
                           echo "Check all environment specific helm templates exists or not" &&
                           echo -n "flag" > /workdir/commit_flag.txt &&
                           if [ ! -d environments ]; then
@@ -460,6 +458,7 @@ spec:
                                 cp -pR /workdir/shared-repo/app-deploy/* ${env}/
                                 ls -lrt ${env}/
                                 sed -i "s/envName: .*/envName: $env/" ${env}/values.yaml
+                                sed -i "s/agentRuntimeName: .*/agentRuntimeName: {{ inputs.parameters.service-name }}_$env/" ${env}/values.yaml
                                 sed -i "s/tag: .*/tag: $image_tag/" ${env}/values.yaml
                             fi
                           done &&
