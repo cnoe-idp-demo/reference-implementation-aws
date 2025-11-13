@@ -3,11 +3,28 @@ from pydantic import BaseModel
 from typing import Dict, Any
 from datetime import datetime
 from strands import Agent
+from utils import get_secret, get_secret_field
+import os
 
 app = FastAPI(title="Strands Agent Server", version="1.0.0")
 
-# Initialize Strands agent
+# Example: Initialize Strands agent with secrets from AWS Secrets Manager
+# Option 1: Get entire secret as dict
+# api_config = get_secret("my-app/api-config")
+# api_key = api_config.get("api_key")
+
+# Option 2: Get specific field from secret
+# api_key = get_secret_field("my-app/api-config", "api_key")
+
 strands_agent = Agent()
+
+# Get the API key from AWS Secrets Manager
+secrets_path = os.getenv("TENANT_SECRETS_PATH")
+openai_api_key = get_secret_field(secrets_path, "OPENAI_API_KEY")
+weather_api_key = get_secret_field(secrets_path, "WEATHER_API_KEY")
+print(f"OpenAI API Key: {openai_api_key}")
+print(f"Weather API Key: {weather_api_key}")
+
 
 class InvocationRequest(BaseModel):
     input: Dict[str, Any]
