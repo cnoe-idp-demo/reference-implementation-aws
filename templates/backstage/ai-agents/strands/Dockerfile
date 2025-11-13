@@ -10,7 +10,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache
 
 # Copy agent file
-COPY agent.py ./
+COPY agent.py utils.py ./
 
 # Expose port
 EXPOSE 8080
