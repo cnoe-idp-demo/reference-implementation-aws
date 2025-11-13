@@ -9,6 +9,8 @@ ingress:
     secretName: "backstage-server-tls"
 backstage:
   replicas: 1
+  nodeSelector:
+    kubernetes.io/arch: amd64
   image:
     registry: ghcr.io
     repository: cnoe-io/backstage-app
