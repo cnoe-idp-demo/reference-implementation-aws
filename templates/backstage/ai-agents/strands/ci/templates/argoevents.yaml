@@ -55,13 +55,11 @@ spec:
                     - name: branch
                       value: main
                     - name: deployrepo
-                      value: "https://github.com/cnoe-idp-demo//{{ .Values.agentName}}-deploy"
+                      value: "https://github.com/cnoe-idp-demo/{{ .Values.agentName}}-deploy"
                     - name: image
                       value: "{{ .Values.imageBase }}/{{ .Values.agentName }}"
                     - name: commit_sha
                       value: latest
-                    - name: hostname
-                      value: {{ .Values.hostName }}
                 volumeClaimTemplates:
                   - metadata:
                       name: workdir
@@ -147,7 +145,7 @@ spec:
                           - |
                             mkdir -p /root/.docker
                             PASSWORD=$(aws ecr get-login-password --region us-west-2)
-                            aws ecr create-repository --repository-name {{`{{inputs.parameters.image-name}}`}} --region us-west-2 || || echo "Repository Already exists"
+                            aws ecr create-repository --repository-name {{`{{inputs.parameters.image-name}}`}} --region us-west-2 || echo "Repository Already exists"
                             AUTH=$(printf "AWS:%s" "${PASSWORD}" | base64 | tr -d '\n')
                             printf '{"auths":{"229560443702.dkr.ecr.us-west-2.amazonaws.com":{"auth":"%s"}}}' "${AUTH}" > /root/.docker/config.json
                     container:
@@ -191,8 +189,8 @@ spec:
           parameters:
             - src:
                 dependencyName: test-dep
-                dataTemplate: "{{`{{ .Input.body.head_commit.id }}`}}"
-              dest: spec.arguments.parameters.6.value
+                dataKey: body.head_commit.id
+              dest: spec.arguments.parameters.5.value
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
