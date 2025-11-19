@@ -1,9 +1,7 @@
 agentName:  ${{values.name}}
 namespace:  ${{values.name}}
 imageRepo: 229560443702.dkr.ecr.us-west-2.amazonaws.com/${{values.name}}
-giteaBaseUrl: ${{values.repoHost}}:443/gitea/giteaAdmin
 
-imageBase: ${{values.repoHost}}:443/gitea/giteaadmin
 
 envs:
 {%- if (values.envConfig.length) %}

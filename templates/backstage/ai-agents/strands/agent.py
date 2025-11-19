@@ -19,11 +19,10 @@ app = FastAPI(title="Strands Agent Server", version="1.0.0")
 strands_agent = Agent()
 
 # Get the API key from AWS Secrets Manager
-secrets_path = os.getenv("TENANT_SECRETS_PATH")
-openai_api_key = get_secret_field(secrets_path, "OPENAI_API_KEY")
-weather_api_key = get_secret_field(secrets_path, "WEATHER_API_KEY")
-print(f"OpenAI API Key: {openai_api_key}")
-print(f"Weather API Key: {weather_api_key}")
+openai_secret = os.getenv("OPENAPI_SECRET")
+if openai_secret:
+    openai_api_key = get_secret(openai_secret)
+    print(f"OpenAI API Key: {openai_api_key}")
 
 
 class InvocationRequest(BaseModel):
