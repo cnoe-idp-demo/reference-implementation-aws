@@ -19,7 +19,7 @@ app = FastAPI(title="Strands Agent Server", version="1.0.0")
 strands_agent = Agent()
 
 # Get the API key from AWS Secrets Manager
-openai_secret = os.getenv("OPENAPI_SECRET")
+openai_secret = os.getenv("OPENAI_API_SECRET")
 if openai_secret:
     openai_api_key = get_secret(openai_secret)
     print(f"OpenAI API Key: {openai_api_key}")
@@ -35,6 +35,7 @@ class InvocationResponse(BaseModel):
 async def invoke_agent(request: InvocationRequest):
     try:
         user_message = request.input.get("prompt", "")
+        print(f"User Request/Prompt: {user_message}")
         if not user_message:
             raise HTTPException(
                 status_code=400, 
@@ -47,6 +48,7 @@ async def invoke_agent(request: InvocationRequest):
             "timestamp": datetime.utcnow().isoformat()
         }
 
+        print(f"Response from LLM: {response}") 
         return InvocationResponse(output=response)
 
     except Exception as e:
