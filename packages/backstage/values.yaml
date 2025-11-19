@@ -8,7 +8,7 @@ ingress:
     enabled: true
     secretName: "backstage-server-tls"
 backstage:
-  replicas: 1
+  replicas: 3
   nodeSelector:
     kubernetes.io/arch: amd64
   image:
