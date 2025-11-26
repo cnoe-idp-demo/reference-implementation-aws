@@ -22,13 +22,20 @@ spec:
           default: strandsdemo01
           pattern: ^[a-z\d]{1,64}$
           description: Provide Agent Name
+        agentRuntime:
+          title: Agent Runtime Environment
+          type: string
+          default: AgentCore
+          enum:
+            - AgentCore
+            - LangChain
         agentSDK:
           title: AgentSDK
           type: string
           default: strands
           enum:
             - strands
-            - lang-graph
+            - langgraph
 
     - title: Agent Environment Configuration
       properties:
@@ -78,13 +85,14 @@ spec:
         description: Sample Agent Deploy Repo
 
     - id: deploy-template
-      name: Generating application deployment template
+      name: Generating agent deployment template
       action: fetch:template
       input:
         url: ./deploy
         targetPath: ./agent-deploy
         values:
           name: ${{parameters.agentName}}
+          agentRuntime: ${{parameters.agentRuntime}}
           repoUrl: ${{ steps['create-agent-repo'].output.remoteUrl }}
           envConfig: ${{parameters.envConfig}}
 
@@ -92,7 +100,7 @@ spec:
       name: Generating agent code template
       action: fetch:template
       input:
-        url: ./strands
+        url: ./${{parameters.agentSDK}}
         targetPath: ./agent
         values:
           name: ${{parameters.agentName}}
@@ -109,6 +117,7 @@ spec:
           name: ${{parameters.agentName}}
           repoHost: github.com
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
+          agentRuntime: ${{parameters.agentRuntime}}
 
     - id: publish-2-app-repo
       name: Publish to agent repo

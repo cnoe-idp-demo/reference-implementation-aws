@@ -1,0 +1,4 @@
+agentName: ${{values.name}}
+namespace: ${{values.name}}
+hostName: mmaroth.people.aws.dev
+imageBase: 229560443702.dkr.ecr.us-west-2.amazonaws.com

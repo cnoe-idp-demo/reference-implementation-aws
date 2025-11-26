@@ -1,11 +1,11 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: admin-binding
+  name: ci-workflow-sa-binding
   namespace: {{ .Values.namespace }}
 subjects:
 - kind: ServiceAccount
-  name: admin
+  name: ci-workflow-sa
 roleRef:
   kind: ClusterRole
   name: cluster-admin

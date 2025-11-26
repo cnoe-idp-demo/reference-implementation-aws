@@ -42,32 +42,32 @@ spec:
                   env: dev
                   entity-id: "{{ .Values.agentName }}"
               spec:
-                serviceAccountName: admin
+                serviceAccountName: ci-workflow-sa
                 entrypoint: ci-build
+                nodeSelector:
+                  kubernetes.io/arch: amd64
                 arguments:
                   parameters:
+                    - name: appName
+                      value: "{{ .Values.agentName}}"
                     - name: apprepo
-                      value: "https://{{ .Values.giteaBaseUrl }}/{{ .Values.agentName}}"
+                      value: "https://github.com/cnoe-idp-demo/{{ .Values.agentName }}"
                     - name: branch
                       value: main
                     - name: deployrepo
-                      value: "{{ .Values.giteaBaseUrl }}/{{ .Values.agentName}}-deploy"
+                      value: "https://github.com/cnoe-idp-demo/{{ .Values.agentName}}-deploy"
                     - name: image
-                      value: "{{ .Values.imageBase }}/{{ .Values.agentName}}"
-                    - name: ecr-image
-                      value: "229560443702.dkr.ecr.us-west-2.amazonaws.com/{{ .Values.agentName}}"
-                    - name: tag-version
-                      value: 0.0.1
-                    - name: hostname
-                      value: {{ .Values.hostName }}
+                      value: "{{ .Values.imageBase }}/{{ .Values.agentName }}"
+                    - name: commit_sha
+                      value: latest
                 volumeClaimTemplates:
-                - metadata:
-                    name: workdir
-                  spec:
-                    accessModes: ["ReadWriteOnce"]
-                    resources:
-                      requests:
-                        storage: 256Mi
+                  - metadata:
+                      name: workdir
+                    spec:
+                      accessModes: ["ReadWriteOnce"]
+                      resources:
+                        requests:
+                          storage: 256Mi
                 templates:
                   - name: ci-build
                     dag:
@@ -80,19 +80,27 @@ spec:
                                 value: "{{`{{workflow.parameters.apprepo}}`}}"
                               - name: branch
                                 value: "{{`{{workflow.parameters.branch}}`}}"
-                        
-                        - name: build-and-push-image
-                          template: build-image-kaniko
+
+                        - name: build-arm64-image
+                          template: build-image-with-kaniko
                           arguments:
                             parameters:
                               - name: image
                                 value: "{{`{{workflow.parameters.image}}`}}"
-                              - name: ecr-image
-                                value: "{{`{{workflow.parameters.ecr-image}}`}}"
                               - name: tag-version
-                                value: "{{`{{workflow.parameters.tag-version}}`}}"
+                                value: "{{`{{workflow.parameters.commit_sha}}`}}"
+                              - name: image-name
+                                value: {{ .Values.agentName }}
                           depends: "clone"
                         
+                        - name: invoke-cd-workflow
+                          template: invoke-cd-workflow
+                          arguments:
+                            parameters:
+                              - name: tag_version
+                                value: "{{`{{workflow.parameters.commit_sha}}`}}"
+                          depends: "build-arm64-image"
+
                   - name: clonerepo
                     inputs:
                       parameters:
@@ -103,7 +111,7 @@ spec:
                         - mountPath: /workdir
                           name: workdir
                       image: alpine/git:v2.45.1
-                      workingDir: /workdir
+                      workingDir: /workdir/agent
                       args:
                         - clone
                         - --depth
@@ -111,36 +119,35 @@ spec:
                         - --branch
                         - "{{`{{inputs.parameters.branch}}`}}"
                         - --single-branch
-                        - "{{`{{inputs.parameters.apprepo}}`}}"
+                        - "{{`{{inputs.parameters.apprepo}}`}}.git"
                         - -c
                         - http.sslVerify=false
                         - .
-                  
-                  - name: go-build
-                    container:
-                      image: golang:1.22
-                      volumeMounts:
-                        - mountPath: /workdir
-                          name: workdir
-                      workingDir: /workdir
-                      command:
-                        - go
-                      args:
-                        - build
-                        - -v
-                        - -o
-                        - myapp
-                  
-                  - name: build-image-kaniko
+
+                  - name: build-image-with-kaniko
                     inputs:
                       parameters:
                         - name: image
-                        - name: ecr-image
                         - name: tag-version
+                        - name: image-name
                     volumes:
                       - name: docker-config
-                        configMap:
-                          name: docker-config
+                        emptyDir: {}
+                    initContainers:
+                      - name: ecr-login
+                        image: amazon/aws-cli:latest
+                        volumeMounts:
+                          - name: docker-config
+                            mountPath: /root/.docker
+                        command:
+                          - /bin/sh
+                          - -c
+                          - |
+                            mkdir -p /root/.docker
+                            PASSWORD=$(aws ecr get-login-password --region us-west-2)
+                            aws ecr create-repository --repository-name {{`{{inputs.parameters.image-name}}`}} --region us-west-2 || echo "Repository Already exists"
+                            AUTH=$(printf "AWS:%s" "${PASSWORD}" | base64 | tr -d '\n')
+                            printf '{"auths":{"229560443702.dkr.ecr.us-west-2.amazonaws.com":{"auth":"%s"}}}' "${AUTH}" > /root/.docker/config.json
                     container:
                       image: gcr.io/kaniko-project/executor:latest
                       volumeMounts:
@@ -148,36 +155,27 @@ spec:
                           mountPath: /workdir
                         - name: docker-config
                           mountPath: /kaniko/.docker
-                      workingDir: /workdir
+                      workingDir: /workdir/agent
                       resources:
                         limits:
                           cpu: 1
                           memory: 2Gi
-                      env:
-                        - name: DOCKER_CONFIG
-                          value: /kaniko/.docker
                       args:
-                      - --dockerfile=Dockerfile
-                      - --context=.
-                      - --destination={{`{{inputs.parameters.image}}`}}:{{`{{inputs.parameters.tag-version}}`}}
-                      - --destination={{`{{inputs.parameters.ecr-image}}`}}:{{`{{inputs.parameters.tag-version}}`}}
-                      - --skip-tls-verify
-                      - --cache=false
-                  
+                        - --dockerfile=Dockerfile
+                        - --context=.
+                        - --destination={{`{{inputs.parameters.image}}`}}:{{`{{inputs.parameters.tag-version}}`}}
+                        - --cache=false
+                        - --custom-platform=linux/amd64
+
                   - name: invoke-cd-workflow
                     inputs:
                       parameters:
-                        - name: hostname
-                        - name: cdpath
-                        - name: imageversion
+                        - name: tag_version
                     container:
                       image: alpine:3.20
-                      envFrom:
-                        - secretRef:
-                            name: gitea-credentials
                       volumeMounts:
-                          - mountPath: /workdir
-                            name: workdir
+                        - mountPath: /workdir
+                          name: workdir
                       workingDir: "/workdir"
                       command: ["/bin/sh"]
                       args:
@@ -185,14 +183,14 @@ spec:
                         - >-
                           set -x &&
                           apk add curl jq &&
-                          cd_workflow_url=https://{{`{{inputs.parameters.hostname}}`}}:443/argo-events/{{`{{inputs.parameters.cdpath}}`}} &&
-                          image_version={{`{{inputs.parameters.imageversion}}`}} &&
-                          curl -k -s -d '{"image_version":"'${image_version}'"}' -H "Content-Type: application/json" -X POST ${cd_workflow_url}
+                          echo "Triggerring CD Workflow" &&
+                          image_version={{`{{inputs.parameters.tag_version}}`}} &&
+                          curl -k -s -d '{"image_version":"'${image_version}'"}' -H "Content-Type: application/json" -X POST ${{values.name}}-deploy-eventsource-svc:12000/
           parameters:
             - src:
                 dependencyName: test-dep
-                dataTemplate: "{{`{{ .Input.body.head_commit.id }}`}}"
-              dest: spec.arguments.parameters.4.value
+                dataKey: body.head_commit.id
+              dest: spec.arguments.parameters.5.value
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -206,7 +204,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: {{ .Values.hostName }}
+    - host: mmaroth.people.aws.dev
       http:
         paths:
           - backend:
@@ -226,3 +224,7 @@ spec:
                   number: 12000
             path: /argo-events/{{ .Values.agentName }}(/|$)(.*)
             pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - mmaroth.people.aws.dev
+      secretName: argo-workflows-server-tls

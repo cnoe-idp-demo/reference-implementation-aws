@@ -13,7 +13,7 @@ metadata:
     argo-workflows.cnoe.io/label-selector: 'entity-id=${{values.name}}'
     backstage.io/techdocs-ref: dir:.
   links:
-    - url: https://${{values.repoHost}}:443/gitea/giteaAdmin/${{values.name}}
+    - url: https://${{values.repoHost}}/cnoe-idp-demo/${{values.name}}
       title: App Repo URL
       icon: github
 spec:
@@ -29,23 +29,10 @@ metadata:
   name: ${{values.name | dump}}
   description: An example system for demonstration purposes
   links:
-    - url: https://${{values.repoHost}}:443/gitea/giteaAdmin/${{values.name}}
+    - url: https://${{values.repoHost}}/cnoe-idp-demo/${{values.name}}
       title: App Repo URL
       icon: github
 spec:
   owner: guests
   lifecycle: experimental
   type: agent
----
-apiVersion: backstage.io/v1alpha1
-kind: API
-metadata:
-  name: ${{values.name | dump}}
-  description: reInvent API 
-spec:
-  type: openapi
-  lifecycle: experimental
-  owner: guests
-  system: ${{values.name}}
-  definition:
-    $text: ./swaggerdocs/swagger_apis.json

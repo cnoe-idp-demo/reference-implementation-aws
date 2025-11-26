@@ -231,6 +231,8 @@ spec:
                       value: mmaroth.people.aws.dev/argo-events
                     - name: repoHostName
                       value: ${{values.repoHost}}
+                    - name: agentRuntime
+                      value: ${{values.agentRuntime}}
                 volumeClaimTemplates:
                   - metadata:
                       name: workdir
@@ -275,7 +277,7 @@ spec:
                               - name: service-name
                                 value: "{{workflow.parameters.service-name}}"
                           depends: "cicd-argocd-apps"
-                        - name: helm-folders-create
+                        - name: create-helm-folders
                           template: create-helm-env-directories
                           arguments:
                             parameters:
@@ -285,17 +287,19 @@ spec:
                                 value: "{{workflow.parameters.service-name}}"
                               - name: host-name
                                 value: "{{workflow.parameters.repoHostName}}"
+                              - name: agent-runtime
+                                value: "{{workflow.parameters.agentRuntime}}"
                           depends: "clone-deploy-repo"
                         - name: push-to-deploy-repo
                           template: push-to-repo
-                          when: "'{{tasks.helm-folders-create.outputs.parameters.commit-flag}}' == 'commit'"
+                          when: "'{{tasks.create-helm-folders.outputs.parameters.commit-flag}}' == 'commit'"
                           arguments:
                             parameters:
                               - name: deploy-repo
                                 value: "github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}-deploy"
                               - name: service-name
                                 value: "{{workflow.parameters.service-name}}"
-                          depends: "helm-folders-create"
+                          depends: "create-helm-folders"
                         - name: create-argocd-apps-for-services
                           template: argo-cd-apps-for-services
                           arguments:
@@ -424,6 +428,7 @@ spec:
                         - name: deploy-repo
                         - name: service-name
                         - name: host-name
+                        - name: agent-runtime
                     container:
                       image: alpine:3.20
                       volumeMounts:
@@ -437,7 +442,7 @@ spec:
                           set -x &&
                           apk add yq &&
                           ls -lrt && pwd &&
-                          sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/app-deploy/values.yaml &&
+                          sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/values.yaml &&
                           echo "Check all environment specific helm templates exists or not" &&
                           echo -n "flag" > /workdir/commit_flag.txt &&
                           if [ ! -d environments ]; then
@@ -455,7 +460,7 @@ spec:
                                 echo -n "commit" > /workdir/commit_flag.txt
                                 mkdir $env
                                 # cp -pR ../helm ${env}/
-                                cp -pR /workdir/shared-repo/app-deploy/* ${env}/
+                                cp -pR /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/* ${env}/
                                 ls -lrt ${env}/
                                 sed -i "s/envName: .*/envName: $env/" ${env}/values.yaml
                                 sed -i "s/agentRuntimeName: .*/agentRuntimeName: {{ inputs.parameters.service-name }}_$env/" ${env}/values.yaml

@@ -1,0 +1,14 @@
+{
+  "dockerfile_lines": [],
+  "graphs": {
+    "research_assistant": {
+      "path": "./supervisor_agent.py:app",
+      "description": "Multi-agent research assistant with 4 sequential agents: Search, Fact Checker, Synthesizer, and Citation Agent. Conducts comprehensive research using web search, verifies facts, synthesizes findings, and formats citations in APA/MLA/Chicago formats."
+    } 
+  },
+  "dependencies": [
+    "."
+  ],
+  "python_version": "3.12",
+  "image_distro": "wolfi"
+}

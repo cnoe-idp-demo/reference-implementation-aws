@@ -1,4 +1,5 @@
 serviceName: ${{values.name}}
+agentRuntime: ${{values.agentRuntime}}
 
 envs:
 {%- if (values.envConfig.length) %}

@@ -1,0 +1,10 @@
+[project]
+name = "langgraphagent"
+version = "0.1.1"
+description = "LangGraph application for AIP POC"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "langgraph-supervisor",
+    "langchain-aws"
+]
