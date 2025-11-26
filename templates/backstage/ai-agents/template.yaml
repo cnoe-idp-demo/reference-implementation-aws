@@ -28,7 +28,7 @@ spec:
           default: AgentCore
           enum:
             - AgentCore
-            - LangChain
+            - LangGraph
         agentSDK:
           title: AgentSDK
           type: string

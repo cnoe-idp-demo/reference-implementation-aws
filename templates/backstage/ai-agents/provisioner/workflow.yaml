@@ -442,7 +442,12 @@ spec:
                           set -x &&
                           apk add yq &&
                           ls -lrt && pwd &&
-                          sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/values.yaml &&
+                          values_file="values.yaml"
+                          if [  {{ inputs.parameters.agent-runtime }} = "LangGraph"]; then
+                            echo "****** Agent Runtime: LangGraph ******"
+                            values_file="langgraph_cloud_config.yaml"
+                          fi
+                          sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/${values_file} &&
                           echo "Check all environment specific helm templates exists or not" &&
                           echo -n "flag" > /workdir/commit_flag.txt &&
                           if [ ! -d environments ]; then
@@ -462,9 +467,10 @@ spec:
                                 # cp -pR ../helm ${env}/
                                 cp -pR /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/* ${env}/
                                 ls -lrt ${env}/
-                                sed -i "s/envName: .*/envName: $env/" ${env}/values.yaml
-                                sed -i "s/agentRuntimeName: .*/agentRuntimeName: {{ inputs.parameters.service-name }}_$env/" ${env}/values.yaml
-                                sed -i "s/tag: .*/tag: $image_tag/" ${env}/values.yaml
+                                sed -i "s/envName: .*/envName: $env/" ${env}/${values_file}
+                                sed -i "s/namespace: .*/namespace: {{ inputs.parameters.service-name }}-$env/" ${env}/${values_file}
+                                sed -i "s/agentRuntimeName: .*/agentRuntimeName: {{ inputs.parameters.service-name }}_$env/" ${env}/${values_file}
+                                sed -i "s/tag: .*/tag: $image_tag/" ${env}/${values_file}
                             fi
                           done &&
                           if grep -q "commit" "/workdir/commit_flag.txt"; then
