@@ -568,9 +568,9 @@ spec:
                             echo "    namespace: $service_name-$env " >> cd-test.yaml
                             echo "    namespace: $service_name-$env " >> cd-test.yaml
                             if [ "{{ inputs.parameters.agent-runtime }}" = "LangGraph" ]; then
-                              echo "****** Agent Runtime: LangGraph ******" &&
+                              echo "****** Agent Runtime: LangGraph ******"
                               echo "    customValuesFile: langgraph_cloud_config.yaml" >> cd-test.yaml
-                            fi &&
+                            fi
                           done &&
                           helm template . -f cd-test.yaml &&
                           helm template . -f cd-test.yaml | kubectl apply -f -
