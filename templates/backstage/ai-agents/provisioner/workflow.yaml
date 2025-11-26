@@ -308,6 +308,8 @@ spec:
                                 value: "https://github.com/cnoe-idp-demo/{{workflow.parameters.service-name}}-deploy"
                               - name: service-name
                                 value: "{{workflow.parameters.service-name}}"
+                              - name: agent-runtime
+                                value: "{{workflow.parameters.agentRuntime}}"
                           depends: "push-to-deploy-repo || push-to-deploy-repo.Skipped"
                         - name: add-webhook-to-apprepo
                           template: github-webhook-creation
@@ -537,6 +539,7 @@ spec:
                       parameters:
                         - name: deploy-repo
                         - name: service-name
+                        - name: agent-runtime
                     container:
                       image: alpine/k8s:1.31.0
                       volumeMounts:
@@ -563,6 +566,11 @@ spec:
                             echo "    repo: $deploy_repo" >> cd-test.yaml
                             echo "    path: environments/$env " >> cd-test.yaml
                             echo "    namespace: $service_name-$env " >> cd-test.yaml
+                            echo "    namespace: $service_name-$env " >> cd-test.yaml
+                            if [ "{{ inputs.parameters.agent-runtime }}" = "LangGraph" ]; then
+                              echo "****** Agent Runtime: LangGraph ******" &&
+                              echo "    customValuesFile: langgraph_cloud_config.yaml" >> cd-test.yaml
+                            fi &&
                           done &&
                           helm template . -f cd-test.yaml &&
                           helm template . -f cd-test.yaml | kubectl apply -f -
