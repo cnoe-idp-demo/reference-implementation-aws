@@ -442,11 +442,11 @@ spec:
                           set -x &&
                           apk add yq &&
                           ls -lrt && pwd &&
-                          values_file="values.yaml"
-                          if [  {{ inputs.parameters.agent-runtime }} = "LangGraph"]; then
-                            echo "****** Agent Runtime: LangGraph ******"
+                          values_file="values.yaml" &&
+                          if [ "{{ inputs.parameters.agent-runtime }}" = "LangGraph" ]; then
+                            echo "****** Agent Runtime: LangGraph ******" &&
                             values_file="langgraph_cloud_config.yaml"
-                          fi
+                          fi &&
                           sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/${values_file} &&
                           echo "Check all environment specific helm templates exists or not" &&
                           echo -n "flag" > /workdir/commit_flag.txt &&
