@@ -5,8 +5,8 @@ metadata:
   name: ${{values.name | dump}}
   description: This is Agent Deploymnt
   tags:
-    - ${{values.agentSDK | dump}}
-    - ${{values.agentRuntime | dump}}
+    - ${{values.agentSDK}}
+    - ${{values.agentRuntime}}
   annotations:
     backstage.io/kubernetes-label-selector: 'entity-id=${{values.name}}'
     argocd/app-selector: 'entity-id=${{values.name}}'
