@@ -450,6 +450,7 @@ spec:
                             values_file="langgraph_cloud_config.yaml"
                           fi &&
                           sed -i "s/agentName: .*/agentName: {{ inputs.parameters.service-name }}/g" /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/${values_file} &&
+                          sed -i "s/REPO_NAME/{{ inputs.parameters.service-name }}/g" /workdir/shared-repo/{{ inputs.parameters.agent-runtime }}/app-deploy/${values_file} &&
                           echo "Check all environment specific helm templates exists or not" &&
                           echo -n "flag" > /workdir/commit_flag.txt &&
                           if [ ! -d environments ]; then
