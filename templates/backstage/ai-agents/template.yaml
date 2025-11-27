@@ -104,6 +104,8 @@ spec:
         targetPath: ./agent
         values:
           name: ${{parameters.agentName}}
+          agentRuntime: ${{parameters.agentRuntime}}
+          agentSDK: ${{parameters.agentSDK}}
           repoHost: github.com
           repoUrl: github.com?owner=cnoe-idp-demo&repo=${{parameters.agentName}}
 

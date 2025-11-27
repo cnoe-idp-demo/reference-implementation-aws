@@ -4,6 +4,9 @@ kind: Component
 metadata:
   name: ${{values.name | dump}}
   description: This is Agent Deploymnt
+  tags:
+    - ${{values.agentSDK | dump}}
+    - ${{values.agentRuntime | dump}}
   annotations:
     backstage.io/kubernetes-label-selector: 'entity-id=${{values.name}}'
     argocd/app-selector: 'entity-id=${{values.name}}'
@@ -14,23 +17,29 @@ metadata:
     backstage.io/techdocs-ref: dir:.
   links:
     - url: https://${{values.repoHost}}/cnoe-idp-demo/${{values.name}}
-      title: App Repo URL
+      title: Agent Repo
+      icon: github
+    - url: https://${{values.repoHost}}/cnoe-idp-demo/${{values.name}}-deploy
+      title: Agent Repo
       icon: github
 spec:
   owner: guests
   lifecycle: experimental
   type: agent
-  system: ${{values.name | dump}}
+  system: ${{values.agentRuntime | dump}}
   providesApis: ['api:${{values.name}}']
 ---
 apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
-  name: ${{values.name | dump}}
-  description: An example system for demonstration purposes
+  name: ${{values.agentRuntime | dump}}
+  description: An example system for demonstration purpose
   links:
     - url: https://${{values.repoHost}}/cnoe-idp-demo/${{values.name}}
-      title: App Repo URL
+      title: Agent Repo URL
+      icon: github
+    - url: https://${{values.repoHost}}/cnoe-idp-demo/${{values.name}}-deploy
+      title: Agent Deploy Repo URL
       icon: github
 spec:
   owner: guests
