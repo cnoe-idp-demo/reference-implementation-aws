@@ -1,7 +1,7 @@
-agentName:  ${{values.name}}
-namespace:  ${{values.name}}
+agentName: ${{values.name}}
+namespace: ${{values.name}}
 imageRepo: 229560443702.dkr.ecr.us-west-2.amazonaws.com/${{values.name}}
-
+agentRuntime: ${{values.agentRuntime}}
 
 envs:
 {%- if (values.envConfig.length) %}

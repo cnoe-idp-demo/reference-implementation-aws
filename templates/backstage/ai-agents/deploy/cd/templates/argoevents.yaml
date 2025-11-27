@@ -50,6 +50,8 @@ spec:
                       value: "github.com/cnoe-idp-demo/{{ .Values.agentName}}-deploy"
                     - name: image-tag
                       value: "0.0.1"
+                    - name: helm_values_file
+                      value: {{ if eq .Values.agentRuntime "LangGraph" }}"langgraph_cloud_config.yaml"{{ else }}"values.yaml"{{ end }}
                 volumeClaimTemplates:
                 - metadata:
                     name: workdir
@@ -71,6 +73,8 @@ spec:
                                 value: "{{`{{workflow.parameters.deployrepo}}`}}"
                               - name: image-tag
                                 value: "{{`{{workflow.parameters.image-tag}}`}}"
+                              - name: helm_values_file
+                                value: "{{`{{workflow.parameters.helm_values_file}}`}}"
                               - name: envname
                                 value: {{ $v.name }}
                           {{- if not (eq $v.depends "None") }}
@@ -82,6 +86,7 @@ spec:
                       parameters:
                         - name: deployrepo
                         - name: image-tag
+                        - name: helm_values_file
                         - name: envname
                     dag:
                       tasks:
@@ -105,6 +110,8 @@ spec:
                                 value: "{{`{{inputs.parameters.image-tag}}`}}"
                               - name: envname
                                 value: "{{`{{inputs.parameters.envname}}`}}"
+                              - name: helm_values_file
+                                value: "{{`{{inputs.parameters.helm_values_file}}`}}"
                           depends: "clone-deploy-repo"
                         # - name: sync-argocd-app
                         #   template: sync-argocd-app
@@ -158,6 +165,7 @@ spec:
                         - name: deployrepo
                         - name: tag-version
                         - name: envname
+                        - name: helm_values_file
                     container:
                       volumeMounts:
                         - mountPath: /workdir
@@ -179,8 +187,9 @@ spec:
                           env_name={{`{{inputs.parameters.envname}}`}} &&
                           cd environments/$env_name &&
                           image_version={{`{{inputs.parameters.tag-version}}`}} &&
-                          sed -i "s/tag: .*/tag: $image_version/g" values.yaml &&
-                          cat values.yaml &&
+                          helm_values_file={{`{{inputs.parameters.helm_values_file}}`}} &&
+                          sed -i "s/tag: .*/tag: $image_version/g" $helm_values_file &&
+                          cat $helm_values_file &&
                           git status &&
                           echo -n "execute_cd" > /workdir/cd_argo_flag.txt &&
                           m_count=$(git status -s | wc -l) &&
@@ -211,7 +220,7 @@ spec:
                             git config --global user.email "noreply@aws.com" &&
                             git config --global user.name "ARGO" &&
                             git remote set-url origin https://x-access-token:${access_token}@{{`{{inputs.parameters.deployrepo}}`}}.git &&
-                            git add values.yaml &&
+                            git add $helm_values_file &&
                             git commit -m "Updated image version to $image_version" &&
                             git push --set-upstream origin main &&
                             rm -f /tmp/private_key.pem
