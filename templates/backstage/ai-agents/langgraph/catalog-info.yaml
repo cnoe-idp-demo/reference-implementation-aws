@@ -19,7 +19,7 @@ metadata:
       title: Agent Repo
       icon: github
     - url: https://${{values.repoHost}}/cnoe-idp-demo/${{values.name}}-deploy
-      title: Agent Repo
+      title: Agent Deploy Repo
       icon: github
 spec:
   owner: guests
