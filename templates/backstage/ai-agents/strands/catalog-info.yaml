@@ -25,7 +25,7 @@ spec:
   owner: guests
   lifecycle: experimental
   type: agent
-  system: ${{values.name | dump}}
+  system: ${{values.agentRuntime | dump}}
   providesApis: ['api:${{values.name}}']
 ---
 apiVersion: backstage.io/v1alpha1
